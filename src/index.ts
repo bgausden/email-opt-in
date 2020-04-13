@@ -7,13 +7,14 @@ import { URLSearchParams, URL } from "url"
 import fs from "fs"
 import readline from "readline"
 import { once } from "events"
+import { rejects } from "assert"
 
 const MB_API_VER = 6
-const MAX_CLIENT_REQ = 1000
+const MAX_CLIENT_REQ = 10 // in range 0 - 200
 const AUDIENCE_CSV = "file:///D:/Downloads/unsubscribed_segment_export_8893817261.csv"
 const CSV_HAS_HEADER = true
 const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
-const SITE_ID = -99
+const SITE_ID = "-99"
 const USERNAME = "siteowner"
 const PASSWORD = "apitest1234"
 const DEFAULT_EMAIL_COL = 1
@@ -22,6 +23,14 @@ interface Client {
     FirstName: string
     LastName: string
     Email: string
+    Id: number
+}
+
+// Convenience function to allow await inside foreach
+async function asyncForEach(array: any[], callback: (...args: any[]) => any) {
+    for (let index = 0; index < array.length; index++) {
+        await callback(array[index], index, array)
+    }
 }
 
 async function getUserToken() {
@@ -68,7 +77,7 @@ async function getClients(accessToken: string, offset: number) {
     let myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
     myHeaders.append("API-Key", "b46102a0d390475aae114962a9a1fbd9")
-    myHeaders.append("SiteId", "-99")
+    myHeaders.append("SiteId", SITE_ID)
     myHeaders.append("Authorization", accessToken)
 
     var urlencoded = new URLSearchParams()
@@ -88,12 +97,15 @@ async function getClients(accessToken: string, offset: number) {
             init
         )
         const json = await response.json()
+        if (json.hasOwnProperty("Error")) throw new Error(json.Error.Message)
         const clients: Client[] = json.Clients
-        return new Promise<Client[]>((resolve) => {
+        return new Promise<Client[]>((resolve, reject) => {
             resolve(clients)
         })
     } catch (error) {
-        console.log("error", error)
+        return new Promise<Error>((resolve, reject) => {
+            reject(error)
+        })
     }
 }
 
@@ -117,15 +129,72 @@ async function getEmails() {
     })
 }
 
+async function optInClient(accessToken: string, clientID: number) {
+    let myHeaders = new Headers()
+    myHeaders.append("Content-Type", "application/json")
+    myHeaders.append("API-Key", "b46102a0d390475aae114962a9a1fbd9")
+    myHeaders.append("SiteId", SITE_ID)
+    myHeaders.append("Authorization", accessToken)
+
+    let raw = JSON.stringify({
+        Client: {
+            Id: clientID,
+            SendAccountEmails: true,
+            SendAccountTexts: true,
+            SendPromotionalEmails: true,
+            SendPromotionalTexts: true,
+            SendScheduleEmails: true,
+            SendScheduleTexts: true,
+        },
+        SendEmail: true,
+        CrossRegionalUpdate: false,
+        Test: false,
+    })
+
+    let init: RequestInit = {
+        method: "POST",
+        headers: myHeaders,
+        body: raw,
+        redirect: "follow",
+    }
+
+    try {
+        const response = await fetch(`https://api.mindbodyonline.com/public/v${MB_API_VER}/client/updateclient`, init)
+        const result = await response.json()
+        const updatedClient = result.Client
+        if (updatedClient.Action !== "Updated") throw new Error(`Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`)
+        return new Promise<string>((resolve) => {
+            resolve(`${updatedClient.Id}: ${updatedClient.Action}`)
+        })
+    } catch (error) {
+        throw error
+    }
+}
+
+async function optInAllClients(accessToken: string, clients: Client[]) {
+    const updateClients = async () => {
+        await asyncForEach(clients, (client) => {
+          optInClient(accessToken, client.Id).then((result)=>console.log(result))
+        })
+    }
+    updateClients()
+}
+
+function optOutClients() {}
+
 async function main() {
     const emails = await getEmails()
     const accessToken = await getUserToken()
-    const clients = await getClients(accessToken, 0)
-    if (!!clients) {
-        clients.forEach((client) => {
-            console.log(client.Email || "")
-        })
+    try {
+        const clients = await getClients(accessToken, 0)
+        if (!!clients && !(clients instanceof Error)) {
+            optInAllClients(accessToken, clients)
+        }
+        optOutClients()
+    } catch (error) {
+        console.error(error)
     }
+
     console.log("Done.")
 }
 
