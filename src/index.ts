@@ -10,8 +10,9 @@ import { once } from "events"
 import { rejects } from "assert"
 
 const MB_API_VER = 6
-const MAX_CLIENT_REQ = 10 // in range 0 - 200
-const AUDIENCE_CSV = "file:///D:/Downloads/unsubscribed_segment_export_8893817261.csv"
+const MAX_CLIENT_REQ = 50 // in range 0 - 200
+//const AUDIENCE_CSV = "file:///D:/Downloads/unsubscribed_segment_export_8893817261.csv"
+const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const CSV_HAS_HEADER = true
 const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
 const SITE_ID = "-99"
@@ -23,7 +24,7 @@ interface Client {
     FirstName: string
     LastName: string
     Email: string
-    Id: number
+    Id: string
 }
 
 // Convenience function to allow await inside foreach
@@ -66,7 +67,7 @@ async function getUserToken() {
 
 function getAudience() {
     try {
-        const readable = fs.createReadStream(new URL(AUDIENCE_CSV))
+        const readable = fs.createReadStream(AUDIENCE_CSV)
         return readable
     } catch (error) {
         console.error(error)
@@ -129,7 +130,7 @@ async function getEmails() {
     })
 }
 
-async function optInClient(accessToken: string, clientID: number) {
+async function optInClient(accessToken: string, clientID: string) {
     let myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
     myHeaders.append("API-Key", "b46102a0d390475aae114962a9a1fbd9")
@@ -161,8 +162,21 @@ async function optInClient(accessToken: string, clientID: number) {
     try {
         const response = await fetch(`https://api.mindbodyonline.com/public/v${MB_API_VER}/client/updateclient`, init)
         const result = await response.json()
+        if (!response.ok) throw `Client update failed: Error is ${result.Error.Code}. Error message is ${result.Error.Message}`
+
+        /*         "[Client] ExternalID: adad FirstName: Dasd LastName: Asdad failed validation HomePhone is not valid."
+            TODO result may not have a Client when you get to the end of the clients?
+            TypeError: Cannot read property 'Action' of undefined
+ */
+
         const updatedClient = result.Client
-        if (updatedClient.Action !== "Updated") throw new Error(`Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`)
+        if (updatedClient === undefined) {
+            console.error(`updatedClient is undefined.`)
+        }
+        if (updatedClient.Action !== "Updated")
+            throw new Error(
+                `Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`
+            )
         return new Promise<string>((resolve) => {
             resolve(`${updatedClient.Id}: ${updatedClient.Action}`)
         })
@@ -172,12 +186,10 @@ async function optInClient(accessToken: string, clientID: number) {
 }
 
 async function optInAllClients(accessToken: string, clients: Client[]) {
-    const updateClients = async () => {
-        await asyncForEach(clients, (client) => {
-          optInClient(accessToken, client.Id).then((result)=>console.log(result))
-        })
+    for (const client of clients) {
+        let result = await optInClient(accessToken, client.Id)
+        process.stdout.write(".")
     }
-    updateClients()
 }
 
 function optOutClients() {}
@@ -185,14 +197,18 @@ function optOutClients() {}
 async function main() {
     const emails = await getEmails()
     const accessToken = await getUserToken()
-    try {
-        const clients = await getClients(accessToken, 0)
-        if (!!clients && !(clients instanceof Error)) {
-            optInAllClients(accessToken, clients)
+    for (let index = 1; index < 10000; index += MAX_CLIENT_REQ) {
+        try {
+            const clients = await getClients(accessToken, index)
+            if (!!clients && !(clients instanceof Error)) {
+                console.debug(`\n${clients.length} clients retrieved.`)
+                process.stdout.write("Processing:")
+                await optInAllClients(accessToken, clients)
+            }
+        } catch (error) {
+            console.error(error)
         }
         optOutClients()
-    } catch (error) {
-        console.error(error)
     }
 
     console.log("Done.")
