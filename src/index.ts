@@ -1,5 +1,6 @@
 /* email-opt-in */
 
+// eslint-disable-next-line no-unused-vars
 import fetch, { RequestInit, Headers } from "node-fetch"
 import { URLSearchParams } from "url"
 import fs from "fs"
@@ -145,42 +146,29 @@ async function optInClient(accessToken: string, clientID: string) {
         redirect: "follow",
     }
 
-    return new Promise<string>(async (resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
         try {
-            const response = await fetch(
-                `${BASE_URL}/client/updateclient`,
-                init
-            )
-            const result = await response.json()
-            if (!response.ok) {
-                reject(
-                    `Client update failed: Error is ${result.Error.Code}. Error message is ${result.Error.Message}`
-                )
-                return
-            }
-
-            /*         "[Client] ExternalID: adad FirstName: Dasd LastName: Asdad failed validation HomePhone is not valid."
-            TODO result may not have a Client when you get to the end of the clients?
-            TypeError: Cannot read property 'Action' of undefined
- */
-
-            const updatedClient = result.Client
-            if (updatedClient === undefined) {
-                throw new Error(`updatedClient is undefined.`)
-            }
-            if (updatedClient.Action !== "Updated") {
-                reject(
-                    `Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`
-                )
-            } /*         return new Promise<string>((resolve) => {
-            resolve(`${updatedClient.Id}: ${updatedClient.Action}`)
-        }) */
-            resolve(`${updatedClient.Id}: ${updatedClient.Action}`)
+            fetch(`${BASE_URL}/client/updateclient`, init).then((response) => {
+                response.json().then((result) => {
+                    if (!response.ok) {
+                        reject(
+                            `Client update failed: Error is ${result.Error.Code}. Error message is ${result.Error.Message}`
+                        )
+                        return
+                    }
+                    const updatedClient = result.Client
+                    if (updatedClient === undefined) {
+                        throw new Error(`updatedClient is undefined.`)
+                    }
+                    if (updatedClient.Action !== "Updated") {
+                        reject(
+                            `Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`
+                        )
+                    }
+                    resolve(`${updatedClient.Id}: ${updatedClient.Action}`)
+                })
+            })
         } catch (error) {
-            /*         throw error
-             */
-
-            // reject(error as Error)
             reject(error)
         }
     })
@@ -203,6 +191,7 @@ async function optInClients(accessToken: string, clients: Client[]) {
 function optOutClients() {}
 
 async function main() {
+    // eslint-disable-next-line no-unused-vars
     const emails = await getEmails()
     const accessToken = await getUserToken()
     for (
