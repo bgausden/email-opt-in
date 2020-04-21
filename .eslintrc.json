@@ -17,8 +17,8 @@
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
         "ecmaVersion": 2018,
-        "sourceType": "module"
+        "sourceType": "module",
+        "project": "D:\\git\\email-opt-in\\tsconfig.json"
     },
-    "plugins": ["@typescript-eslint"],
-    "rules": {} }
+    "plugins": ["@typescript-eslint"]
 }
