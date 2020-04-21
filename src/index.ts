@@ -19,14 +19,50 @@ const SITE_ID = "-99"
 const DEFAULT_EMAIL_COL = 1
 
 interface Client {
-    FirstName: string
-    LastName: string
-    Email: string
     Id: string
+    FirstName: string
+    LastName?: string
+    Email: string
+    Action?: string
 }
+
+interface MBError {
+    Message: string
+    Code: string
+}
+
+interface WrappedClient {
+    Client: Client
+}
+
+interface WrappedMBError {
+    Error: MBError
+}
+
+type updateClientResult = WrappedClient | WrappedMBError
 
 // TODO get draftlog working in Typescript
 // Calculate the progress for a progress bar
+
+/**
+ * Simple Utility Methods for checking information about a value.
+ *
+ * @param  {Mixed}  value  Could be anything.
+ * @return {Object}
+ */
+// eslint-disable-next-line no-unused-vars
+function is(value: any) {
+    return {
+        a: function (check: any) {
+            if (check.prototype) check = check.prototype.constructor.name
+            const type: string = Object.prototype.toString
+                .call(value)
+                .slice(8, -1)
+                .toLowerCase()
+            return value != null && type === check.toLowerCase()
+        },
+    }
+}
 
 async function getUserToken() {
     const myHeaders = new Headers()
@@ -150,22 +186,32 @@ async function optInClient(accessToken: string, clientID: string) {
         try {
             fetch(`${BASE_URL}/client/updateclient`, init).then((response) => {
                 response.json().then((result) => {
-                    if (!response.ok) {
+
+                    if (isWrappedMBError(result)) {
+                        // We assume result is an object containing a single Error property
+                        const error = result.Error
                         reject(
-                            `Client update failed: Error is ${result.Error.Code}. Error message is ${result.Error.Message}`
+                            `Client update failed: Error is ${error.Code}. Error message is ${error.Message}`
                         )
                         return
                     }
-                    const updatedClient = result.Client
-                    if (updatedClient === undefined) {
-                        throw new Error(`updatedClient is undefined.`)
+
+                    if (isWrappedClient(result)) {
+                        const client = result.Client
+                        // following is obsolete?
+                        if (client === undefined) {
+                            throw new Error(`updatedClient is undefined.`)
+                        }
+                        if (client.Action !== "Updated") {
+                            reject(
+                                `Client ${client.Id} ${client.FirstName} ${client.LastName} failed to update.`
+                            )
+                        }
+                        resolve(`${client.Id}: ${client.Action}`)
                     }
-                    if (updatedClient.Action !== "Updated") {
-                        reject(
-                            `Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`
-                        )
-                    }
-                    resolve(`${updatedClient.Id}: ${updatedClient.Action}`)
+
+                    // should never reach here
+                    reject(`Invalid result from fetch: ${result}`)
                 })
             })
         } catch (error) {
@@ -173,6 +219,15 @@ async function optInClient(accessToken: string, clientID: string) {
         }
     })
 } // end function optInClient()
+
+// type guard using assertion
+function isWrappedMBError(result: any): result is WrappedMBError {
+    return (result as WrappedMBError).Error !== undefined
+}
+
+function isWrappedClient(result: any): result is WrappedClient {
+    return (result as WrappedClient).Client !== undefined
+}
 
 async function optInClients(accessToken: string, clients: Client[]) {
     let successCount = 0
