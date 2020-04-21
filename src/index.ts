@@ -4,7 +4,6 @@ import fetch, { RequestInit, Headers } from "node-fetch"
 import { URLSearchParams, URL } from "url"
 import fs from "fs"
 import readline from "readline"
-import { syncBuiltinESMExports } from "module"
 // import draftlog = require("draftlog")
 
 const MB_API_VER = 6
@@ -16,8 +15,6 @@ const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const CSV_HAS_HEADER = true
 const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
 const SITE_ID = "-99"
-const USERNAME = "siteowner"
-const PASSWORD = "apitest1234"
 const DEFAULT_EMAIL_COL = 1
 
 interface Client {
@@ -29,12 +26,6 @@ interface Client {
 
 // TODO get draftlog working in Typescript
 // Calculate the progress for a progress bar
-function ProgressBar(progress: number) {
-    // Make it 50 characters length
-    const LINE_LENGTH = 50
-    var units = Math.round(progress / (100 / LINE_LENGTH))
-    return "[" + "=".repeat(units) + " ".repeat(50 - units) + "] " + progress + "%"
-}
 
 async function getUserToken() {
     var myHeaders = new Headers()
@@ -54,7 +45,10 @@ async function getUserToken() {
     }
 
     try {
-        const response = await fetch(`${BASE_URL}/usertoken/issue`, requestOptions)
+        const response = await fetch(
+            `${BASE_URL}/usertoken/issue`,
+            requestOptions
+        )
         const json = await response.json()
         const token = json.AccessToken
         // const token = (await response.json()).AccessToken
@@ -99,7 +93,7 @@ async function getClients(accessToken: string, offset: number) {
         const json = await response.json()
         if (json.hasOwnProperty("Error")) throw json
         const clients: Client[] = json.Clients
-        return new Promise<Client[]>((resolve, reject) => {
+        return new Promise<Client[]>((resolve) => {
             resolve(clients)
         })
     } catch (error) {
@@ -161,10 +155,15 @@ async function optInClient(accessToken: string, clientID: string) {
 
     return new Promise<string>(async (resolve, reject) => {
         try {
-            const response = await fetch(`${BASE_URL}/client/updateclient`, init)
+            const response = await fetch(
+                `${BASE_URL}/client/updateclient`,
+                init
+            )
             const result = await response.json()
             if (!response.ok) {
-                reject(`Client update failed: Error is ${result.Error.Code}. Error message is ${result.Error.Message}`)
+                reject(
+                    `Client update failed: Error is ${result.Error.Code}. Error message is ${result.Error.Message}`
+                )
                 return
             }
 
@@ -178,7 +177,9 @@ async function optInClient(accessToken: string, clientID: string) {
                 throw new Error(`updatedClient is undefined.`)
             }
             if (updatedClient.Action !== "Updated") {
-                reject(`Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`)
+                reject(
+                    `Client ${result.Id} ${updatedClient.FirstName} ${updatedClient.LastName} failed to update.`
+                )
             } /*         return new Promise<string>((resolve) => {
             resolve(`${updatedClient.Id}: ${updatedClient.Action}`)
         }) */
@@ -194,21 +195,17 @@ async function optInClient(accessToken: string, clientID: string) {
 } // end function optInClient()
 
 async function optInClients(accessToken: string, clients: Client[]) {
-    try {
-        let successCount = 0
-        for (const client of clients) {
-            try {
-                let result = await optInClient(accessToken, client.Id)
-                process.stdout.write(".")
-                successCount += 1
-            } catch (error) {
-                console.log(`\n${error}`)
-            }
+    let successCount = 0
+    for (const client of clients) {
+        try {
+            let result = await optInClient(accessToken, client.Id)
+            process.stdout.write(".")
+            successCount += 1
+        } catch (error) {
+            console.log(`\n${error}`)
         }
-        return successCount
-    } catch (error) {
-        throw error
     }
+    return successCount
 }
 
 function optOutClients() {}
@@ -216,19 +213,27 @@ function optOutClients() {}
 async function main() {
     const emails = await getEmails()
     const accessToken = await getUserToken()
-    for (let index = 0; index <= MAX_CLIENTS_TO_PROCESS; index += MAX_CLIENT_REQ) {
+    for (
+        let index = 0;
+        index <= MAX_CLIENTS_TO_PROCESS;
+        index += MAX_CLIENT_REQ
+    ) {
         try {
             const clients = await getClients(accessToken, index)
             if (!!clients && !(clients instanceof Error)) {
                 //console.debug(`\n${clients.length} clients retrieved.`)
-                if ((clients.length === 0)) {
+                if (clients.length === 0) {
                     console.log(`\nAll clients retrieved.`)
                     break
                 }
                 process.stdout.write("C")
                 // TODO should optInAllClients return a value? What value? Tuple containing Error and Status?
                 optInClients(accessToken, clients)
-                    .then((successCount) => console.log(`\nIndex:${index}: ${successCount} clients opted-in.`))
+                    .then((successCount) =>
+                        console.log(
+                            `\nIndex:${index}: ${successCount} clients opted-in.`
+                        )
+                    )
                     .catch((error) => {
                         throw error
                     })
@@ -236,10 +241,8 @@ async function main() {
         } catch (error) {
             console.log(error)
         }
-
     }
     optOutClients()
-
 }
 
 main().catch((error) => console.log(error as Error))
