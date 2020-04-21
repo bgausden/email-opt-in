@@ -1,7 +1,7 @@
 /* email-opt-in */
 
 import fetch, { RequestInit, Headers } from "node-fetch"
-import { URLSearchParams, URL } from "url"
+import { URLSearchParams } from "url"
 import fs from "fs"
 import readline from "readline"
 // import draftlog = require("draftlog")
@@ -28,16 +28,16 @@ interface Client {
 // Calculate the progress for a progress bar
 
 async function getUserToken() {
-    var myHeaders = new Headers()
+    const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/x-www-form-urlencoded")
-    myHeaders.append("API-Key", "b46102a0d390475aae114962a9a1fbd9")
+    myHeaders.append("API-Key", API_TOKEN)
     myHeaders.append("SiteId", "-99")
 
-    var urlencoded = new URLSearchParams()
+    const urlencoded = new URLSearchParams()
     urlencoded.append("Username", "Siteowner")
     urlencoded.append("Password", "apitest1234")
 
-    var requestOptions: RequestInit = {
+    const requestOptions: RequestInit = {
         method: "POST",
         headers: myHeaders,
         body: urlencoded,
@@ -51,7 +51,6 @@ async function getUserToken() {
         )
         const json = await response.json()
         const token = json.AccessToken
-        // const token = (await response.json()).AccessToken
         return token
     } catch (error) {
         console.log("error", error)
@@ -68,49 +67,42 @@ function getAudience() {
 }
 
 async function getClients(accessToken: string, offset: number) {
-    let myHeaders = new Headers()
+    const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
-    myHeaders.append("API-Key", "b46102a0d390475aae114962a9a1fbd9")
+    myHeaders.append("API-Key", API_TOKEN)
     myHeaders.append("SiteId", SITE_ID)
     myHeaders.append("Authorization", accessToken)
 
-    var urlencoded = new URLSearchParams()
+    const urlencoded = new URLSearchParams()
     urlencoded.append("Username", "Siteowner")
     urlencoded.append("Password", "apitest1234")
 
-    let init: RequestInit = {
+    const init: RequestInit = {
         method: "GET",
         headers: myHeaders,
         // body: urlencoded,
         redirect: "follow",
     }
 
-    try {
-        const response = await fetch(
-            `${BASE_URL}/client/clients?limit=${MAX_CLIENT_REQ}&offset=${offset}&searchText=`,
-            init
-        )
-        const json = await response.json()
-        if (json.hasOwnProperty("Error")) throw json
-        const clients: Client[] = json.Clients
-        return new Promise<Client[]>((resolve) => {
-            resolve(clients)
-        })
-    } catch (error) {
-        /*         return new Promise<Error>((resolve, reject) => {
-            reject(error)
-        }) */
-        throw error
-    }
+    const response = await fetch(
+        `${BASE_URL}/client/clients?limit=${MAX_CLIENT_REQ}&offset=${offset}&searchText=`,
+        init
+    )
+    const json = await response.json()
+    if (Object.prototype.hasOwnProperty.call(json, "Error")) throw json
+    const clients: Client[] = json.Clients
+    return new Promise<Client[]>((resolve) => {
+        resolve(clients)
+    })
 }
 
 async function getEmails() {
     const readableAudience = getAudience()
     const rl = readline.createInterface(readableAudience!)
-    let emails: string[] = []
+    const emails: string[] = []
     let firstLine = true
     rl.on("line", (line) => {
-        let email = line.split(",", 10)[DEFAULT_EMAIL_COL - 1]
+        const email = line.split(",", 10)[DEFAULT_EMAIL_COL - 1]
         if (firstLine && CSV_HAS_HEADER) {
             firstLine = false
         } else {
@@ -125,13 +117,13 @@ async function getEmails() {
 }
 
 async function optInClient(accessToken: string, clientID: string) {
-    let myHeaders = new Headers()
+    const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
-    myHeaders.append("API-Key", "b46102a0d390475aae114962a9a1fbd9")
+    myHeaders.append("API-Key", API_TOKEN)
     myHeaders.append("SiteId", SITE_ID)
     myHeaders.append("Authorization", accessToken)
 
-    let raw = JSON.stringify({
+    const raw = JSON.stringify({
         Client: {
             Id: clientID,
             SendAccountEmails: true,
@@ -146,7 +138,7 @@ async function optInClient(accessToken: string, clientID: string) {
         Test: false,
     })
 
-    let init: RequestInit = {
+    const init: RequestInit = {
         method: "POST",
         headers: myHeaders,
         body: raw,
@@ -198,7 +190,7 @@ async function optInClients(accessToken: string, clients: Client[]) {
     let successCount = 0
     for (const client of clients) {
         try {
-            let result = await optInClient(accessToken, client.Id)
+            await optInClient(accessToken, client.Id)
             process.stdout.write(".")
             successCount += 1
         } catch (error) {
