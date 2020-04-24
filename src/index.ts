@@ -1,11 +1,13 @@
 /* email-opt-in */
 
-// eslint-disable-next-line no-unused-vars
-import fetch, { RequestInit, Headers } from "node-fetch"
+import fetch from "node-fetch"
+import { Headers } from "node-fetch"
 import { URLSearchParams } from "url"
 import fs from "fs"
 import readline from "readline"
 // import draftlog = require("draftlog")
+//import request from "request"
+import { BackoffError, RequestRateLimiter } from "request-rate-limiter"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
@@ -41,6 +43,25 @@ interface WrappedMBError {
 
 type updateClientResult = WrappedClient | WrappedMBError
 
+interface RequestConfig {
+    url: RequestInfo
+    init: RequestInit
+}
+
+class fetchRequestHandler {
+    // eslint-disable-next-line no-unused-vars
+    constructor(public backoffCode: number = 429) {}
+    async request(requestConfig: any) {
+        const url = requestConfig.url
+        const init = requestConfig.init
+        //const response = await fetch(url, init)
+        const response = await fetch(url, init)
+        if (response.status === this.backoffCode)
+            throw new BackoffError(`${response.statusText}`)
+        else return response
+    }
+}
+
 // TODO get draftlog working in Typescript
 // Calculate the progress for a progress bar
 
@@ -64,6 +85,20 @@ function is(value: any) {
     }
 }
 
+function initLimiter(
+    backoffTime = 10,
+    requestRate = 2000,
+    interval = 60,
+    timeout = 600
+) {
+    return new RequestRateLimiter({
+        backoffTime: backoffTime,
+        requestRate: requestRate,
+        interval: interval,
+        timeout: timeout,
+    })
+}
+
 async function getUserToken() {
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/x-www-form-urlencoded")
@@ -74,7 +109,7 @@ async function getUserToken() {
     urlencoded.append("Username", "Siteowner")
     urlencoded.append("Password", "apitest1234")
 
-    const requestOptions: RequestInit = {
+    const requestOptions: any = {
         method: "POST",
         headers: myHeaders,
         body: urlencoded,
@@ -82,10 +117,10 @@ async function getUserToken() {
     }
 
     try {
-        const response = await fetch(
-            `${BASE_URL}/usertoken/issue`,
-            requestOptions
-        )
+        const response = await limiter.request({
+            url: `${BASE_URL}/usertoken/issue`,
+            init: requestOptions,
+        } as RequestConfig)
         const json = await response.json()
         const token = json.AccessToken
         return token
@@ -93,6 +128,22 @@ async function getUserToken() {
         console.log("error", error)
     }
 }
+
+/* async function getUserTokenRequest() {
+    const options: request.Options = {
+        method: "POST",
+        url: `${BASE_URL}/usertoken/issue`,
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "API-Key": API_TOKEN,
+            SiteId: "-99",
+        },
+    }
+    request(options, function (error, response) {
+        if (error) throw new Error(error)
+        console.log(response.body)
+    })
+} */
 
 function getAudience() {
     try {
@@ -114,17 +165,17 @@ async function getClients(accessToken: string, offset: number) {
     urlencoded.append("Username", "Siteowner")
     urlencoded.append("Password", "apitest1234")
 
-    const init: RequestInit = {
+    const init: any = {
         method: "GET",
         headers: myHeaders,
         // body: urlencoded,
         redirect: "follow",
     }
 
-    const response = await fetch(
-        `${BASE_URL}/client/clients?limit=${MAX_CLIENT_REQ}&offset=${offset}&searchText=`,
-        init
-    )
+    const response = await limiter.request({
+        url: `${BASE_URL}/client/clients?limit=${MAX_CLIENT_REQ}&offset=${offset}&searchText=`,
+        init: init,
+    } as RequestConfig)
     const json = await response.json()
     if (Object.prototype.hasOwnProperty.call(json, "Error")) throw json
     const clients: Client[] = json.Clients
@@ -175,7 +226,7 @@ async function optInClient(accessToken: string, clientID: string) {
         Test: false,
     })
 
-    const init: RequestInit = {
+    const init: any = {
         method: "POST",
         headers: myHeaders,
         body: raw,
@@ -184,9 +235,8 @@ async function optInClient(accessToken: string, clientID: string) {
 
     return new Promise<string>((resolve, reject) => {
         try {
-            fetch(`${BASE_URL}/client/updateclient`, init).then((response) => {
-                response.json().then((result) => {
-
+            limiter.request({url: `${BASE_URL}/client/updateclient`, init: init} as RequestConfig).then((response) => {
+                response.json().then((result:any) => {
                     if (isWrappedMBError(result)) {
                         // We assume result is an object containing a single Error property
                         const error = result.Error
@@ -281,5 +331,8 @@ async function main() {
     optOutClients()
 }
 
+// eslint-disable-next-line no-var
+var limiter = initLimiter()
+limiter.setRequestHandler(new fetchRequestHandler())
+
 main().catch((error) => console.log(error as Error))
-console.log("Done.")
