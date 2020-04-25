@@ -13,8 +13,8 @@ const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
 const MAX_CLIENTS_TO_PROCESS = 5000
 const MAX_CLIENT_REQ = 100 // in range 0 - 200
-//const AUDIENCE_CSV = "file:///D:/Downloads/unsubscribed_segment_export_8893817261.csv"
-const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
+// const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
+const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
 const CSV_HAS_HEADER = true
 const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
 const SITE_ID = "-99"
@@ -174,24 +174,28 @@ async function getClients(accessToken: string, offset: number) {
 async function getEmails() {
     const readableAudience = getAudience()
     const rl = readline.createInterface(readableAudience!)
-    const emails: string[] = []
+    const emails = new Set<string>()
     let firstLine = true
     rl.on("line", (line) => {
         const email = line.split(",", 10)[DEFAULT_EMAIL_COL - 1]
         if (firstLine && CSV_HAS_HEADER) {
             firstLine = false
         } else {
-            emails.push(email)
+            emails.add(email)
         }
     })
-    return new Promise<string[]>((resolve) => {
+    return new Promise<Set<string>>((resolve) => {
         rl.on("close", () => {
             resolve(emails)
         })
     })
 }
 
-async function optInClient(accessToken: string, clientID: string) {
+async function updateClientOptInStatus(
+    accessToken: string,
+    clientID: string,
+    optOut: boolean
+) {
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
     myHeaders.append("API-Key", API_TOKEN)
@@ -203,8 +207,8 @@ async function optInClient(accessToken: string, clientID: string) {
             Id: clientID,
             SendAccountEmails: true,
             SendAccountTexts: true,
-            SendPromotionalEmails: true,
-            SendPromotionalTexts: true,
+            SendPromotionalEmails: optOut,
+            SendPromotionalTexts: optOut,
             SendScheduleEmails: true,
             SendScheduleTexts: true,
         },
@@ -271,13 +275,22 @@ function isWrappedClient(result: any): result is WrappedClient {
     return (result as WrappedClient).Client !== undefined
 }
 
-async function optInClients(accessToken: string, clients: Client[]) {
-    let successCount = 0
+async function updateClients(
+    accessToken: string,
+    clients: Client[],
+    optOutEmails: Set<string>
+) {
+    let updateSuccessCount = 0
     for (const client of clients) {
+        const optOut = optOutEmails.has(client.Email)
         try {
-            await optInClient(accessToken, client.Id)
-            process.stdout.write(".")
-            successCount += 1
+            await updateClientOptInStatus(accessToken, client.Id, optOut)
+            if (optOut) {
+                process.stdout.write("O")
+            } else {
+                process.stdout.write(".")
+            }
+            updateSuccessCount += 1
             globalUpdateCount += 1
             if (globalUpdateCount % 80 == 0) {
                 process.stdout.write(`\n`)
@@ -296,14 +309,14 @@ async function optInClients(accessToken: string, clients: Client[]) {
             }
         }
     }
-    return successCount
+    return updateSuccessCount
 }
 
 function optOutClients() {}
 
 async function main() {
     // eslint-disable-next-line no-unused-vars
-    const emails = await getEmails()
+    const optOutEmails = await getEmails()
     const accessToken = await getUserToken()
     for (
         let index = 0;
@@ -320,7 +333,7 @@ async function main() {
                 }
                 // process.stdout.write("C")
                 // TODO should optInAllClients return a value? What value? Tuple containing Error and Status?
-                optInClients(accessToken, clients)
+                updateClients(accessToken, clients, optOutEmails)
                     // eslint-disable-next-line no-unused-vars
                     .then((successCount) => {
                         /*                         console.log(
