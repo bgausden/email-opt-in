@@ -10,14 +10,14 @@
     "author": "barry@lissome.hk",
     "license": "ISC",
     "dependencies": {
-        "@types/node": "^13.11.1",
         "node-fetch": "^2.6.0",
         "request-rate-limiter": "^2.0.3"
     },
     "devDependencies": {
-        "@types/node-fetch": "^2.5.6",
-        "@typescript-eslint/eslint-plugin": "^2.28.0",
-        "@typescript-eslint/parser": "^2.28.0",
+        "@types/node": "^13.13.2",
+        "@types/node-fetch": "^2.5.7",
+        "@typescript-eslint/eslint-plugin": "^2.29.0",
+        "@typescript-eslint/parser": "^2.29.0",
         "eslint": "^6.8.0",
         "prettier": "^2.0.5"
     }
