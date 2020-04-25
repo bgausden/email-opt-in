@@ -54,11 +54,11 @@ class fetchRequestHandler {
     async request(requestConfig: any) {
         const url = requestConfig.url
         const init = requestConfig.init
-        //const response = await fetch(url, init)
         const response = await fetch(url, init)
-        if (response.status === this.backoffCode)
+        if (response.status === this.backoffCode) {
+            console.log(`\nWorker backing off for 10s`)
             throw new BackoffError(`${response.statusText}`)
-        else return response
+        } else return response
     }
 }
 
@@ -87,10 +87,13 @@ function is(value: any) {
 
 function initLimiter(
     backoffTime = 10,
-    requestRate = 2000,
+    requestRate = 1000,
     interval = 60,
     timeout = 600
 ) {
+    process.stdout.write(
+        `Rate limiting to ${requestRate} API calls per ${interval} seconds.\n`
+    )
     return new RequestRateLimiter({
         backoffTime: backoffTime,
         requestRate: requestRate,
@@ -128,22 +131,6 @@ async function getUserToken() {
         console.log("error", error)
     }
 }
-
-/* async function getUserTokenRequest() {
-    const options: request.Options = {
-        method: "POST",
-        url: `${BASE_URL}/usertoken/issue`,
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "API-Key": API_TOKEN,
-            SiteId: "-99",
-        },
-    }
-    request(options, function (error, response) {
-        if (error) throw new Error(error)
-        console.log(response.body)
-    })
-} */
 
 function getAudience() {
     try {
@@ -235,35 +222,40 @@ async function optInClient(accessToken: string, clientID: string) {
 
     return new Promise<string>((resolve, reject) => {
         try {
-            limiter.request({url: `${BASE_URL}/client/updateclient`, init: init} as RequestConfig).then((response) => {
-                response.json().then((result:any) => {
-                    if (isWrappedMBError(result)) {
-                        // We assume result is an object containing a single Error property
-                        const error = result.Error
-                        reject(
-                            `Client update failed: Error is ${error.Code}. Error message is ${error.Message}`
-                        )
-                        return
-                    }
-
-                    if (isWrappedClient(result)) {
-                        const client = result.Client
-                        // following is obsolete?
-                        if (client === undefined) {
-                            throw new Error(`updatedClient is undefined.`)
-                        }
-                        if (client.Action !== "Updated") {
+            limiter
+                .request({
+                    url: `${BASE_URL}/client/updateclient`,
+                    init: init,
+                } as RequestConfig)
+                .then((response) => {
+                    response.json().then((result: any) => {
+                        if (isWrappedMBError(result)) {
+                            // We assume result is an object containing a single Error property
+                            const error = result.Error
                             reject(
-                                `Client ${client.Id} ${client.FirstName} ${client.LastName} failed to update.`
+                                `Client update failed: Error is ${error.Code}. Error message is ${error.Message}`
                             )
+                            return
                         }
-                        resolve(`${client.Id}: ${client.Action}`)
-                    }
 
-                    // should never reach here
-                    reject(`Invalid result from fetch: ${result}`)
+                        if (isWrappedClient(result)) {
+                            const client = result.Client
+                            // following is obsolete?
+                            if (client === undefined) {
+                                throw new Error(`updatedClient is undefined.`)
+                            }
+                            if (client.Action !== "Updated") {
+                                reject(
+                                    `Client ${client.Id} ${client.FirstName} ${client.LastName} failed to update.`
+                                )
+                            }
+                            resolve(`${client.Id}: ${client.Action}`)
+                        }
+
+                        // should never reach here
+                        reject(`Invalid result from fetch: ${result}`)
+                    })
                 })
-            })
         } catch (error) {
             reject(error)
         }
@@ -286,8 +278,22 @@ async function optInClients(accessToken: string, clients: Client[]) {
             await optInClient(accessToken, client.Id)
             process.stdout.write(".")
             successCount += 1
+            globalUpdateCount += 1
+            if (globalUpdateCount % 80 == 0) {
+                process.stdout.write(`\n`)
+            }
+            if (globalUpdateCount % 1000 == 0) {
+                console.log(
+                    `\n${globalUpdateCount} clients processed. Continuing.`
+                )
+            }
         } catch (error) {
-            console.log(`\n${error}`)
+            // console.log(`\n${error}`)
+            process.stdout.write("E")
+            globalUpdateCount += 1
+            if (globalUpdateCount % 80 == 0) {
+                process.stdout.write(`\n`)
+            }
         }
     }
     return successCount
@@ -312,14 +318,15 @@ async function main() {
                     console.log(`\nAll clients retrieved.`)
                     break
                 }
-                process.stdout.write("C")
+                // process.stdout.write("C")
                 // TODO should optInAllClients return a value? What value? Tuple containing Error and Status?
                 optInClients(accessToken, clients)
-                    .then((successCount) =>
-                        console.log(
+                    // eslint-disable-next-line no-unused-vars
+                    .then((successCount) => {
+                        /*                         console.log(
                             `\nIndex:${index}: ${successCount} clients opted-in.`
-                        )
-                    )
+                        ) */
+                    })
                     .catch((error) => {
                         throw error
                     })
@@ -331,6 +338,8 @@ async function main() {
     optOutClients()
 }
 
+// eslint-disable-next-line no-var
+var globalUpdateCount = 0
 // eslint-disable-next-line no-var
 var limiter = initLimiter()
 limiter.setRequestHandler(new fetchRequestHandler())
