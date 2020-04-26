@@ -1,13 +1,19 @@
 /* email-opt-in */
 
+/* Run from PS command-line: $env:DEBUG="*,-getClients"; node .\dist\index.js */
+
+// TODO #1 capture and dump clients where updates failed
+// TODO #2 add config to control data sources, data outputs and what logging to generate.
+// TODO #3 add progress meter
+
 import fetch from "node-fetch"
 import { Headers } from "node-fetch"
 import { URLSearchParams } from "url"
 import fs from "fs"
 import readline from "readline"
 // import draftlog = require("draftlog")
-//import request from "request"
 import { BackoffError, RequestRateLimiter } from "request-rate-limiter"
+import debug from "debug"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
@@ -56,14 +62,11 @@ class fetchRequestHandler {
         const init = requestConfig.init
         const response = await fetch(url, init)
         if (response.status === this.backoffCode) {
-            console.log(`\nWorker backing off for 10s`)
+            mainDebug(`\nWorker backing off for 10s`)
             throw new BackoffError(`${response.statusText}`)
         } else return response
     }
 }
-
-// TODO get draftlog working in Typescript
-// Calculate the progress for a progress bar
 
 /**
  * Simple Utility Methods for checking information about a value.
@@ -91,8 +94,8 @@ function initLimiter(
     interval = 60,
     timeout = 600
 ) {
-    process.stdout.write(
-        `Rate limiting to ${requestRate} API calls per ${interval} seconds.\n`
+    mainDebug(
+        `Rate limiting to ${requestRate} API calls per ${interval} seconds. %s`
     )
     return new RequestRateLimiter({
         backoffTime: backoffTime,
@@ -103,6 +106,8 @@ function initLimiter(
 }
 
 async function getUserToken() {
+    const userTokenDebug = debug("userToken")
+    userTokenDebug("Retrieving MB user token")
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/x-www-form-urlencoded")
     myHeaders.append("API-Key", API_TOKEN)
@@ -126,22 +131,29 @@ async function getUserToken() {
         } as RequestConfig)
         const json = await response.json()
         const token = json.AccessToken
+        userTokenDebug("Have MB user token.")
         return token
     } catch (error) {
-        console.log("error", error)
+        userTokenDebug("Failed to retrieve MB user token %o", error)
     }
 }
 
 function getAudience() {
+    mainDebug("Opening opted-out clients CSV %s", "getAudience")
     try {
         const readable = fs.createReadStream(AUDIENCE_CSV)
+        mainDebug("Opening opted-out clients CSV completed. %s", "getAudience")
         return readable
     } catch (error) {
-        console.log(error)
+        mainDebug("Opening opted-out clients CSV failed %o", error)
     }
 }
 
 async function getClients(accessToken: string, offset: number) {
+    const getClientsDebug = debug("getClients")
+    getClientsDebug(
+        `Retrieving ${MAX_CLIENT_REQ} MB clients from offset ${offset}`
+    )
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
     myHeaders.append("API-Key", API_TOKEN)
@@ -149,13 +161,13 @@ async function getClients(accessToken: string, offset: number) {
     myHeaders.append("Authorization", accessToken)
 
     const urlencoded = new URLSearchParams()
+    // TODO #4 replace magic strings
     urlencoded.append("Username", "Siteowner")
     urlencoded.append("Password", "apitest1234")
 
     const init: any = {
         method: "GET",
         headers: myHeaders,
-        // body: urlencoded,
         redirect: "follow",
     }
 
@@ -167,6 +179,9 @@ async function getClients(accessToken: string, offset: number) {
     if (Object.prototype.hasOwnProperty.call(json, "Error")) throw json
     const clients: Client[] = json.Clients
     return new Promise<Client[]>((resolve) => {
+        getClientsDebug(
+            `Retrieved ${clients.length} clients from offset ${offset} %s`
+        )
         resolve(clients)
     })
 }
@@ -235,10 +250,7 @@ async function updateClientOptInStatus(
                     response.json().then((result: any) => {
                         if (isWrappedMBError(result)) {
                             // We assume result is an object containing a single Error property
-                            const error = result.Error
-                            reject(
-                                `Client update failed: Error is ${error.Code}. Error message is ${error.Message}`
-                            )
+                            reject(result.Error)
                             return
                         }
 
@@ -255,7 +267,6 @@ async function updateClientOptInStatus(
                             }
                             resolve(`${client.Id}: ${client.Action}`)
                         }
-
                         // should never reach here
                         reject(`Invalid result from fetch: ${result}`)
                     })
@@ -280,36 +291,39 @@ async function updateClients(
     clients: Client[],
     optOutEmails: Set<string>
 ) {
-    let updateSuccessCount = 0
+    const updateClientsDebug = debug("updateClients")
+    const failUpdateDebug = debug("failedClientUpdate")
+    let optedInCount = 0
+    let updateFailCount = 0
+    let optedOutCount = 0
     for (const client of clients) {
         const optOut = optOutEmails.has(client.Email)
+        clientsProcessed += 1
+        if (clientsProcessed % 100 == 0) {
+            globalStatsDebug(
+                "%d of %d clients processed",
+                clientsProcessed,
+                clientsRetrieved
+            )
+        }
         try {
             await updateClientOptInStatus(accessToken, client.Id, optOut)
             if (optOut) {
-                process.stdout.write("O")
+                // mainDebug("O")
+                optedOutCount += 1
             } else {
-                process.stdout.write(".")
-            }
-            updateSuccessCount += 1
-            globalUpdateCount += 1
-            if (globalUpdateCount % 80 == 0) {
-                process.stdout.write(`\n`)
-            }
-            if (globalUpdateCount % 1000 == 0) {
-                console.log(
-                    `\n${globalUpdateCount} clients processed. Continuing.`
-                )
+                // mainDebug(".")
+                optedInCount += 1
             }
         } catch (error) {
-            // console.log(`\n${error}`)
-            process.stdout.write("E")
-            globalUpdateCount += 1
-            if (globalUpdateCount % 80 == 0) {
-                process.stdout.write(`\n`)
-            }
+            failUpdateDebug(`Client update failed %o`, error)
+            updateFailCount += 1
         }
     }
-    return updateSuccessCount
+    updateClientsDebug(`Opted-in: %d`, optedInCount)
+    updateClientsDebug(`Opted-out: %d`, optedOutCount)
+    updateClientsDebug(`Failed to update: %d`, updateFailCount)
+    return [optedInCount, optedOutCount, updateFailCount]
 }
 
 function optOutClients() {}
@@ -318,6 +332,7 @@ async function main() {
     // eslint-disable-next-line no-unused-vars
     const optOutEmails = await getEmails()
     const accessToken = await getUserToken()
+    mainDebug("Retrieving and updating clients.")
     for (
         let index = 0;
         index <= MAX_CLIENTS_TO_PROCESS;
@@ -326,35 +341,32 @@ async function main() {
         try {
             const clients = await getClients(accessToken, index)
             if (!!clients && !(clients instanceof Error)) {
-                //console.debug(`\n${clients.length} clients retrieved.`)
-                if (clients.length === 0) {
-                    console.log(`\nAll clients retrieved.`)
+                clientsRetrieved += clients.length
+                if (clients.length == 0) {
+                    mainDebug(`All %d clients retrieved.`, clientsRetrieved)
                     break
                 }
-                // process.stdout.write("C")
                 // TODO should optInAllClients return a value? What value? Tuple containing Error and Status?
                 updateClients(accessToken, clients, optOutEmails)
                     // eslint-disable-next-line no-unused-vars
-                    .then((successCount) => {
-                        /*                         console.log(
-                            `\nIndex:${index}: ${successCount} clients opted-in.`
-                        ) */
-                    })
+                    .then((successCount) => {})
                     .catch((error) => {
                         throw error
                     })
             }
         } catch (error) {
-            console.log(error)
+            mainDebug(error)
         }
     }
     optOutClients()
 }
-
+const mainDebug = debug("main")
+const globalStatsDebug = debug("global-stats")
 // eslint-disable-next-line no-var
-var globalUpdateCount = 0
+var clientsRetrieved = 0
+// eslint-disable-next-line no-var
+var clientsProcessed = 0
 // eslint-disable-next-line no-var
 var limiter = initLimiter()
 limiter.setRequestHandler(new fetchRequestHandler())
-
-main().catch((error) => console.log(error as Error))
+main().catch((error) => mainDebug(error as Error))
