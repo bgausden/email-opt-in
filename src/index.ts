@@ -362,11 +362,8 @@ async function main() {
 }
 const mainDebug = debug("main")
 const globalStatsDebug = debug("global-stats")
-// eslint-disable-next-line no-var
-var clientsRetrieved = 0
-// eslint-disable-next-line no-var
-var clientsProcessed = 0
-// eslint-disable-next-line no-var
-var limiter = initLimiter()
+let clientsRetrieved = 0
+let clientsProcessed = 0
+const limiter = initLimiter()
 limiter.setRequestHandler(new fetchRequestHandler())
 main().catch((error) => mainDebug(error as Error))
