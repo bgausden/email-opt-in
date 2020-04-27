@@ -10,10 +10,11 @@
     "author": "barry@lissome.hk",
     "license": "ISC",
     "dependencies": {
+        "chalk": "^4.0.0",
         "debug": "^4.1.1",
         "node-fetch": "^2.6.0",
         "request-rate-limiter": "^2.0.3",
-        "supports-color": "^7.1.0"
+        "super-progress": "^2.0.2"
     },
     "devDependencies": {
         "@types/debug": "^4.1.5",

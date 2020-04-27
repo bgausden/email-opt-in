@@ -11,9 +11,11 @@ import { Headers } from "node-fetch"
 import { URLSearchParams } from "url"
 import fs from "fs"
 import readline from "readline"
-// import draftlog = require("draftlog")
 import { BackoffError, RequestRateLimiter } from "request-rate-limiter"
 import debug from "debug"
+import Progress from "super-progress"
+import { clearInterval } from "timers"
+import { EOL } from "os"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
@@ -360,6 +362,20 @@ async function main() {
     }
     optOutClients()
 }
+
+// Entrypoint
+
+const pb = Progress.Progress.create(process.stdout.columns - 1)
+
+const t = setInterval(() => {
+    pb.tick().then(() => {
+        if (pb.state.percentComplete >= 1.0) {
+            clearInterval(t)
+            process.stdout.write(EOL)
+        }
+    })
+}, 100)
+
 const mainDebug = debug("main")
 const globalStatsDebug = debug("global-stats")
 let clientsRetrieved = 0
