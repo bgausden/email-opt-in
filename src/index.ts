@@ -17,10 +17,12 @@ import debug from "debug"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 5000
+const MAX_CLIENTS_TO_PROCESS = 1000
 const MAX_CLIENT_REQ = 100 // in range 0 - 200
 // const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
+const BAD_CLIENTS = "./data/Clients_Failed_Update.log"
+// const DEFAULT_LOG = "./data/default.log"
 const CSV_HAS_HEADER = true
 const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
 const SITE_ID = "-99"
@@ -67,6 +69,51 @@ class fetchRequestHandler {
         } else return response
     }
 }
+
+/* class outputFile {
+    path: fs.PathLike = DEFAULT_LOG
+    writeable: fs.WriteStream | undefined = undefined
+    initialized: boolean = false
+    constructor(path: fs.PathLike) {
+        if (!this.initialized || this.initialized === undefined) {
+            try {
+                this.writeable = fs.createWriteStream(path || this.path)
+                this.writeable.once("open", (fd) => {
+                    console.log(`fd:${fd} is open.`)
+                })
+                this.initialized = true
+            } catch (error) {
+                throw new Error(error)
+            }
+        }
+    }
+    write(data: string): boolean | undefined {
+        if (this.initialized) {
+            try {
+                if (this.writeable!.writable) {
+                    return this.writeable?.write(data)
+                } else {
+                    throw new Error()
+                }
+            } catch (error) {
+                mainDebug(
+                    `Not possible to write to ${
+                        this.writeable?.path
+                    }. ${error.toString()}`
+                )
+            }
+        }
+    }
+
+    end() {
+        if (this.initialized) {
+            this.writeable?.end(() => {
+                console.log(`Closed output file.`)
+            })
+            this.initialized = false
+        }
+    }
+} */
 
 /**
  * Simple Utility Methods for checking information about a value.
@@ -292,7 +339,7 @@ async function updateClients(
     optOutEmails: Set<string>
 ) {
     const updateClientsDebug = debug("updateClients")
-    const failUpdateDebug = debug("failedClientUpdate")
+    const failedUpdateDebug = debug("failedClientUpdate")
     let optedInCount = 0
     let updateFailCount = 0
     let optedOutCount = 0
@@ -307,7 +354,13 @@ async function updateClients(
             )
         }
         try {
-            await updateClientOptInStatus(accessToken, client.Id, optOut)
+            // eslint-disable-next-line no-unused-vars
+            const updateResult = await updateClientOptInStatus(
+                accessToken,
+                client.Id,
+                optOut
+            )
+            // console.logconsole.log(updateResult)
             if (optOut) {
                 // mainDebug("O")
                 optedOutCount += 1
@@ -316,19 +369,27 @@ async function updateClients(
                 optedInCount += 1
             }
         } catch (error) {
-            failUpdateDebug(`Client update failed %o`, error)
+            failedUpdateDebug(`Client update failed %o`, error)
             updateFailCount += 1
+            // dump rejected client to file
+            const writeSuccess = bad_clients.write(`${JSON.stringify(error)}\n`)
+            if (!writeSuccess) {
+                failedUpdateDebug(`Failed to write to file`)
+            }
         }
     }
-    updateClientsDebug(`Opted-in: %d`, optedInCount)
-    updateClientsDebug(`Opted-out: %d`, optedOutCount)
-    updateClientsDebug(`Failed to update: %d`, updateFailCount)
+    updateClientsDebug(
+        `Opted-in: %d, Opted-out: %d, Failed to update: %d`,
+        optedInCount,
+        optedOutCount,
+        updateFailCount
+    )
+    // updateClientsDebug(`Opted-out: %d`, optedOutCount)
+    // updateClientsDebug(`Failed to update: %d`, updateFailCount)
     return [optedInCount, optedOutCount, updateFailCount]
 }
 
-function optOutClients() {}
-
-async function main() {
+async function processClients() {
     // eslint-disable-next-line no-unused-vars
     const optOutEmails = await getEmails()
     const accessToken = await getUserToken()
@@ -347,10 +408,12 @@ async function main() {
                     break
                 }
                 // TODO should optInAllClients return a value? What value? Tuple containing Error and Status?
-                updateClients(accessToken, clients, optOutEmails)
+                // TODO use Promise.all to drive all the client updates and then clean up when the Promise.all completes.
+                await updateClients(accessToken, clients, optOutEmails)
                     // eslint-disable-next-line no-unused-vars
                     .then((successCount) => {})
                     .catch((error) => {
+                        console.log(error)
                         throw error
                     })
             }
@@ -358,12 +421,18 @@ async function main() {
             mainDebug(error)
         }
     }
-    optOutClients()
 }
+
 const mainDebug = debug("main")
 const globalStatsDebug = debug("global-stats")
+// const bad_clients = new outputFile(BAD_CLIENTS)
+const bad_clients = fs.createWriteStream(BAD_CLIENTS)
 let clientsRetrieved = 0
 let clientsProcessed = 0
 const limiter = initLimiter()
 limiter.setRequestHandler(new fetchRequestHandler())
-main().catch((error) => mainDebug(error as Error))
+processClients()
+    .catch((error) => mainDebug(error as Error))
+    .finally(() => {
+        bad_clients.end(() => console.log("Closed bad clients file"))
+    })
