@@ -17,7 +17,7 @@ import debug from "debug"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 1000
+const MAX_CLIENTS_TO_PROCESS = 200
 const MAX_CLIENT_REQ = 100 // in range 0 - 200
 // const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
@@ -56,6 +56,12 @@ interface RequestConfig {
     init: RequestInit
 }
 
+interface updateClientsResult {
+    optedInClients: number
+    optedOutClients: number
+    updateFailedClients: number
+}
+
 class fetchRequestHandler {
     // eslint-disable-next-line no-unused-vars
     constructor(public backoffCode: number = 429) {}
@@ -69,51 +75,6 @@ class fetchRequestHandler {
         } else return response
     }
 }
-
-/* class outputFile {
-    path: fs.PathLike = DEFAULT_LOG
-    writeable: fs.WriteStream | undefined = undefined
-    initialized: boolean = false
-    constructor(path: fs.PathLike) {
-        if (!this.initialized || this.initialized === undefined) {
-            try {
-                this.writeable = fs.createWriteStream(path || this.path)
-                this.writeable.once("open", (fd) => {
-                    console.log(`fd:${fd} is open.`)
-                })
-                this.initialized = true
-            } catch (error) {
-                throw new Error(error)
-            }
-        }
-    }
-    write(data: string): boolean | undefined {
-        if (this.initialized) {
-            try {
-                if (this.writeable!.writable) {
-                    return this.writeable?.write(data)
-                } else {
-                    throw new Error()
-                }
-            } catch (error) {
-                mainDebug(
-                    `Not possible to write to ${
-                        this.writeable?.path
-                    }. ${error.toString()}`
-                )
-            }
-        }
-    }
-
-    end() {
-        if (this.initialized) {
-            this.writeable?.end(() => {
-                console.log(`Closed output file.`)
-            })
-            this.initialized = false
-        }
-    }
-} */
 
 /**
  * Simple Utility Methods for checking information about a value.
@@ -337,7 +298,7 @@ async function updateClients(
     accessToken: string,
     clients: Client[],
     optOutEmails: Set<string>
-) {
+): Promise<updateClientsResult> {
     const updateClientsDebug = debug("updateClients")
     const failedUpdateDebug = debug("failedClientUpdate")
     let optedInCount = 0
@@ -354,13 +315,11 @@ async function updateClients(
             )
         }
         try {
-            // eslint-disable-next-line no-unused-vars
-            const updateResult = await updateClientOptInStatus(
+            await updateClientOptInStatus(
                 accessToken,
                 client.Id,
                 optOut
             )
-            // console.logconsole.log(updateResult)
             if (optOut) {
                 // mainDebug("O")
                 optedOutCount += 1
@@ -371,7 +330,6 @@ async function updateClients(
         } catch (error) {
             failedUpdateDebug(`Client update failed %o`, error)
             updateFailCount += 1
-            // dump rejected client to file
             const writeSuccess = bad_clients.write(`${JSON.stringify(error)}\n`)
             if (!writeSuccess) {
                 failedUpdateDebug(`Failed to write to file`)
@@ -386,46 +344,53 @@ async function updateClients(
     )
     // updateClientsDebug(`Opted-out: %d`, optedOutCount)
     // updateClientsDebug(`Failed to update: %d`, updateFailCount)
-    return [optedInCount, optedOutCount, updateFailCount]
+    return {
+        optedInClients: optedInCount,
+        optedOutClients: optedOutCount,
+        updateFailedClients: updateFailCount,
+    }
 }
 
 async function processClients() {
     // eslint-disable-next-line no-unused-vars
     const optOutEmails = await getEmails()
     const accessToken = await getUserToken()
+    const updateClientPromises: Promise<updateClientsResult>[] = []
     mainDebug("Retrieving and updating clients.")
     for (
         let index = 0;
-        index <= MAX_CLIENTS_TO_PROCESS;
+        index < MAX_CLIENTS_TO_PROCESS;
         index += MAX_CLIENT_REQ
     ) {
         try {
             const clients = await getClients(accessToken, index)
             if (!!clients && !(clients instanceof Error)) {
                 clientsRetrieved += clients.length
+                updateClientPromises.push(updateClients(accessToken, clients, optOutEmails))
+                mainDebug(`Pushed in-flight batch at index %d`, index)
                 if (clients.length == 0) {
                     mainDebug(`All %d clients retrieved.`, clientsRetrieved)
                     break
                 }
-                // TODO should optInAllClients return a value? What value? Tuple containing Error and Status?
-                // TODO use Promise.all to drive all the client updates and then clean up when the Promise.all completes.
-                await updateClients(accessToken, clients, optOutEmails)
-                    // eslint-disable-next-line no-unused-vars
-                    .then((successCount) => {})
-                    .catch((error) => {
-                        console.log(error)
-                        throw error
-                    })
             }
         } catch (error) {
             mainDebug(error)
         }
     }
+    Promise.all(updateClientPromises)
+    .then(
+        (result) => mainDebug(`%d update client batches processed`, result.length)
+    )
+    .catch(
+        (error) => mainDebug(`update clients batch update failed %O`,error)
+    )
+    .finally(
+        () => bad_clients.end(() => mainDebug("Closed bad clients file"))
+    )
 }
 
 const mainDebug = debug("main")
 const globalStatsDebug = debug("global-stats")
-// const bad_clients = new outputFile(BAD_CLIENTS)
 const bad_clients = fs.createWriteStream(BAD_CLIENTS)
 let clientsRetrieved = 0
 let clientsProcessed = 0
@@ -434,5 +399,5 @@ limiter.setRequestHandler(new fetchRequestHandler())
 processClients()
     .catch((error) => mainDebug(error as Error))
     .finally(() => {
-        bad_clients.end(() => console.log("Closed bad clients file"))
+        
     })
