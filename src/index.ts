@@ -6,8 +6,7 @@
 // TODO #2 add config to control data sources, data outputs and what logging to generate.
 // TODO #3 add progress meter
 
-import fetch from "node-fetch"
-import { Headers } from "node-fetch"
+import fetch, { Headers } from "node-fetch"
 import { URLSearchParams } from "url"
 import fs from "fs"
 import readline from "readline"
@@ -17,8 +16,8 @@ import debug from "debug"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 200
-const MAX_CLIENT_REQ = 100 // in range 0 - 200
+const MAX_CLIENTS_TO_PROCESS = 5000 
+const MAX_CLIENT_REQ = 200 // in range 0 - 200
 // const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
 const BAD_CLIENTS = "./data/Clients_Failed_Update.log"
