@@ -1,0 +1,8 @@
+  "main": "lib/index",
+  "exports": {
+    "import": "./lib/index.mjs",
+    "require": "./lib/index.js"
+  },
+  "module": "lib/index.mjs",
+
+  Update package.json in any packages that give "no such export" to include exports (and maybe modules?)
