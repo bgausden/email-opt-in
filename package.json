@@ -11,7 +11,7 @@
     "license": "ISC",
     "dependencies": {
         "debug": "^4.1.1",
-        "node-fetch": "^2.6.0",
+        "node-fetch": "^2.6.1",
         "request-rate-limiter": "^2.0.3",
         "supports-color": "^7.1.0"
     },
