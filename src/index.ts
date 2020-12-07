@@ -16,7 +16,7 @@ import debug from "debug"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 5000 
+const MAX_CLIENTS_TO_PROCESS = 5000
 const MAX_CLIENT_REQ = 200 // in range 0 - 200
 // const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
@@ -26,6 +26,8 @@ const CSV_HAS_HEADER = true
 const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
 const SITE_ID = "-99"
 const DEFAULT_EMAIL_COL = 1
+const SITEOWNER = "Siteowner"
+
 
 interface Client {
     Id: string
@@ -61,6 +63,12 @@ interface updateClientsResult {
     updateFailedClients: number
 }
 
+/*
+This class is supposed to implement the use of fetch to access data instead
+of the request-rate-limiter built-in implemenation that used request (now deprecated)
+Can probably be ignored so we don't have to deal with passing options in request-form to
+fetch (which expects them in fetch-form)
+*/
 class fetchRequestHandler {
     // eslint-disable-next-line no-unused-vars
     constructor(public backoffCode: number = 429) {}
@@ -121,7 +129,7 @@ async function getUserToken() {
     myHeaders.append("SiteId", "-99")
 
     const urlencoded = new URLSearchParams()
-    urlencoded.append("Username", "Siteowner")
+    urlencoded.append("Username", SITEOWNER)
     urlencoded.append("Password", "apitest1234")
 
     const requestOptions: any = {
@@ -169,7 +177,7 @@ async function getClients(accessToken: string, offset: number) {
 
     const urlencoded = new URLSearchParams()
     // TODO #4 replace magic strings
-    urlencoded.append("Username", "Siteowner")
+    urlencoded.append("Username", SITEOWNER)
     urlencoded.append("Password", "apitest1234")
 
     const init: any = {
@@ -304,6 +312,7 @@ async function updateClients(
     let updateFailCount = 0
     let optedOutCount = 0
     for (const client of clients) {
+        // optOutEmails is all the user who have opted out via MailChimp
         const optOut = optOutEmails.has(client.Email)
         clientsProcessed += 1
         if (clientsProcessed % 100 == 0) {
@@ -314,11 +323,7 @@ async function updateClients(
             )
         }
         try {
-            await updateClientOptInStatus(
-                accessToken,
-                client.Id,
-                optOut
-            )
+            await updateClientOptInStatus(accessToken, client.Id, optOut)
             if (optOut) {
                 // mainDebug("O")
                 optedOutCount += 1
@@ -365,7 +370,9 @@ async function processClients() {
             const clients = await getClients(accessToken, index)
             if (!!clients && !(clients instanceof Error)) {
                 clientsRetrieved += clients.length
-                updateClientPromises.push(updateClients(accessToken, clients, optOutEmails))
+                updateClientPromises.push(
+                    updateClients(accessToken, clients, optOutEmails)
+                )
                 mainDebug(`Pushed in-flight batch at index %d`, index)
                 if (clients.length == 0) {
                     mainDebug(`All %d clients retrieved.`, clientsRetrieved)
@@ -377,15 +384,15 @@ async function processClients() {
         }
     }
     Promise.all(updateClientPromises)
-    .then(
-        (result) => mainDebug(`%d update client batches processed`, result.length)
-    )
-    .catch(
-        (error) => mainDebug(`update clients batch update failed %O`,error)
-    )
-    .finally(
-        () => bad_clients.end(() => mainDebug("Closed bad clients file"))
-    )
+        .then((result) =>
+            mainDebug(`%d update client batches processed`, result.length)
+        )
+        .catch((error) =>
+            mainDebug(`update clients batch update failed %O`, error)
+        )
+        .finally(() =>
+            bad_clients.end(() => mainDebug("Closed bad clients file"))
+        )
 }
 
 const mainDebug = debug("main")
@@ -397,6 +404,4 @@ const limiter = initLimiter()
 limiter.setRequestHandler(new fetchRequestHandler())
 processClients()
     .catch((error) => mainDebug(error as Error))
-    .finally(() => {
-        
-    })
+    .finally(() => {})
