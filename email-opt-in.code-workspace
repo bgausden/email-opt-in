@@ -5,6 +5,8 @@
 		}
 	],
 	"settings": {
-		"typescript.tsdk": "node_modules\\typescript\\lib"
+		"typescript.tsdk": "node_modules\\typescript\\lib",
+		"editor.fontLigatures": true,
+		"editor.fontFamily": "'Fira Code','Source Code Pro',Menlo, Monaco, 'Courier New', monospace"
 	}
 }
