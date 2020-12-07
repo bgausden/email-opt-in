@@ -1,7 +1,0 @@
-{"Message":"[Client] ExternalID: 100014804 FirstName: Joseph LastName: Kult failed validation HomePhone is not valid.","Code":"ValidationFailed"}
-{"Message":"[Client] ExternalID: 89750 FirstName: Andres LastName: Moran failed validation The username supplied is already in use by another client.","Code":"ValidationFailed"}
-{"Message":"[Client] ExternalID: adad FirstName: Dasd LastName: Asdad failed validation HomePhone is not valid.","Code":"ValidationFailed"}
-{"Message":"[Client] ExternalID: 100012333 FirstName: Brett LastName: Hull failed validation The username supplied is already in use by another client.","Code":"ValidationFailed"}
-{"Message":"[Client] ExternalID: 100012586 FirstName: Eric LastName: Sasaki failed validation The username supplied is already in use by another client.","Code":"ValidationFailed"}
-{"Message":"[Client] ExternalID: 100011510 FirstName: Carly LastName: Kleiman failed validation The username supplied is already in use by another client.","Code":"ValidationFailed"}
-{"Message":"[Client] ExternalID: 100012232 FirstName: Sam LastName: Schulund failed validation MobilePhone is not valid.","Code":"ValidationFailed"}
