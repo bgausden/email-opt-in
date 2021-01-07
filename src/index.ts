@@ -16,7 +16,7 @@ import debug from "debug"
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 5000
+const MAX_CLIENTS_TO_PROCESS = 500
 const MAX_CLIENT_REQ = 200 // in range 0 - 200
 // const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
@@ -28,13 +28,13 @@ const SITE_ID = "-99"
 const DEFAULT_EMAIL_COL = 1
 const SITEOWNER = "Siteowner"
 
-
 interface Client {
     Id: string
     FirstName: string
     LastName?: string
     Email: string
     Action?: string
+    Notes?: string
 }
 
 interface MBError {
@@ -71,7 +71,7 @@ fetch (which expects them in fetch-form)
 */
 class fetchRequestHandler {
     // eslint-disable-next-line no-unused-vars
-    constructor(public backoffCode: number = 429) {}
+    constructor(public backoffCode: number = 429) { }
     async request(requestConfig: any) {
         const url = requestConfig.url
         const init = requestConfig.init
@@ -220,12 +220,16 @@ async function getEmails() {
         })
     })
 }
-
+/**
+ * @param accessToken Auth token to access MB REST API
+ * @param clientID Client ID
+ * @param optOut Whether to opt the client out of marketing emails
+ */
 async function updateClientOptInStatus(
     accessToken: string,
     clientID: string,
     optOut: boolean
-) {
+): Promise<string> {
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
     myHeaders.append("API-Key", API_TOKEN)
@@ -302,18 +306,23 @@ function isWrappedClient(result: any): result is WrappedClient {
 }
 
 async function updateClients(
+    /*
+    TODO look into more granular opt-out e.g. only opt-out from marketing
+    but keep transactional emails
+    */
     accessToken: string,
     clients: Client[],
     optOutEmails: Set<string>
 ): Promise<updateClientsResult> {
     const updateClientsDebug = debug("updateClients")
     const failedUpdateDebug = debug("failedClientUpdate")
+    const clientReviewDebug = debug("reviewClients")
     let optedInCount = 0
     let updateFailCount = 0
     let optedOutCount = 0
     for (const client of clients) {
         // optOutEmails is all the user who have opted out via MailChimp
-        const optOut = optOutEmails.has(client.Email)
+        let optOut = optOutEmails.has(client.Email)
         clientsProcessed += 1
         if (clientsProcessed % 100 == 0) {
             globalStatsDebug(
@@ -321,6 +330,21 @@ async function updateClients(
                 clientsProcessed,
                 clientsRetrieved
             )
+        }
+        if (client.Notes) {
+            /* There's possibly a note saying don't send emails so play it safe */
+            /* TODO mark this client for review */
+            optOut = true
+            const warning = `Opting out client ${client.Id} ${client.FirstName} ${client.LastName} due to presence of notes on file.`
+            clientReviewDebug(warning)
+            const info = `${client.Id} ${client.FirstName} ${client.LastName} notes are: ${client.Notes}`
+            clientReviewDebug(info)
+            const writeSuccess = bad_clients.write(`warning\n`)
+            if (!writeSuccess) {
+                failedUpdateDebug(
+                    `Failed to write ${client.Id} ${client.FirstName} ${client.LastName} to file: ${bad_clients.path}. Continuing anyway.`
+                )
+            }
         }
         try {
             await updateClientOptInStatus(accessToken, client.Id, optOut)
@@ -336,7 +360,9 @@ async function updateClients(
             updateFailCount += 1
             const writeSuccess = bad_clients.write(`${JSON.stringify(error)}\n`)
             if (!writeSuccess) {
-                failedUpdateDebug(`Failed to write to file`)
+                failedUpdateDebug(
+                    `Failed to write to file: ${bad_clients.path}`
+                )
             }
         }
     }
@@ -404,4 +430,4 @@ const limiter = initLimiter()
 limiter.setRequestHandler(new fetchRequestHandler())
 processClients()
     .catch((error) => mainDebug(error as Error))
-    .finally(() => {})
+    .finally(() => { })
