@@ -21,6 +21,7 @@ const MAX_CLIENT_REQ = 200 // in range 0 - 200
 // const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
 const BAD_CLIENTS = "./data/Clients_Failed_Update.log"
+const REVIEW_CLIENTS = "./data/Clients_For_Review.log"
 // const DEFAULT_LOG = "./data/default.log"
 const CSV_HAS_HEADER = true
 const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
@@ -331,18 +332,21 @@ async function updateClients(
                 clientsRetrieved
             )
         }
-        if (client.Notes) {
+        if (client.Notes?.trim()) {
+            const Id: String = client.Id
+            // const Notes:String = client.Notes
+            const FirstName:String = client.FirstName
+            const LastName: String|undefined = client.LastName
             /* There's possibly a note saying don't send emails so play it safe */
-            /* TODO mark this client for review */
             optOut = true
-            const warning = `Opting out client ${client.Id} ${client.FirstName} ${client.LastName} due to presence of notes on file.`
-            clientReviewDebug(warning)
-            const info = `${client.Id} ${client.FirstName} ${client.LastName} notes are: ${client.Notes}`
-            clientReviewDebug(info)
-            const writeSuccess = bad_clients.write(`warning\n`)
+            const warning = `Opting out client ${Id} ${FirstName} ${LastName} due to presence of notes on file.`
+            clientReviewDebug("Opting out client %s %s %s due to presence of notes on file.",Id,FirstName,LastName)
+            // const info = `${Id} ${FirstName} ${LastName} notes are: ${Notes.substr(0,20)}`
+            // clientReviewDebug(info)
+            const writeSuccess = review_clients.write(`${warning}\n`)
             if (!writeSuccess) {
                 failedUpdateDebug(
-                    `Failed to write ${client.Id} ${client.FirstName} ${client.LastName} to file: ${bad_clients.path}. Continuing anyway.`
+                    `Failed to write ${Id} ${FirstName} ${LastName} to file: ${bad_clients.path}. Continuing anyway.`
                 )
             }
         }
@@ -424,6 +428,7 @@ async function processClients() {
 const mainDebug = debug("main")
 const globalStatsDebug = debug("global-stats")
 const bad_clients = fs.createWriteStream(BAD_CLIENTS)
+const review_clients = fs.createWriteStream(REVIEW_CLIENTS)
 let clientsRetrieved = 0
 let clientsProcessed = 0
 const limiter = initLimiter()
