@@ -1,0 +1,67 @@
+diff --git a/node_modules/node-fetch/package.json b/node_modules/node-fetch/package.json
+index 2f322b5..cf5be43 100644
+--- a/node_modules/node-fetch/package.json
++++ b/node_modules/node-fetch/package.json
+@@ -1,26 +1,32 @@
+ {
+-  "_from": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
++  "_args": [
++    [
++      "node-fetch@2.6.1",
++      "D:\\git\\email-opt-in"
++    ]
++  ],
++  "_from": "node-fetch@2.6.1",
+   "_id": "node-fetch@2.6.1",
+   "_inBundle": false,
+   "_integrity": "sha512-V4aYg89jEoVRxRb2fJdAg8FHvI7cEyYdVAh94HH0UIK8oJxUfkjlDQN9RbMx+bEjP7+ggMiFRprSti032Oipxw==",
+   "_location": "/node-fetch",
+   "_phantomChildren": {},
+   "_requested": {
+-    "type": "remote",
+-    "raw": "node-fetch@https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
++    "type": "version",
++    "registry": true,
++    "raw": "node-fetch@2.6.1",
+     "name": "node-fetch",
+     "escapedName": "node-fetch",
+-    "rawSpec": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
+-    "saveSpec": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
+-    "fetchSpec": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz"
++    "rawSpec": "2.6.1",
++    "saveSpec": null,
++    "fetchSpec": "2.6.1"
+   },
+   "_requiredBy": [
+     "/"
+   ],
+   "_resolved": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
+-  "_shasum": "045bd323631f76ed2e2b55573394416b639a0052",
+-  "_spec": "node-fetch@https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
+-  "_where": "C:\\Users\\Barry\\AppData\\Local\\Temp\\tmp-52688C1RJ12yRRvuY",
++  "_spec": "2.6.1",
++  "_where": "D:\\git\\email-opt-in",
+   "author": {
+     "name": "David Frank"
+   },
+@@ -28,9 +34,7 @@
+   "bugs": {
+     "url": "https://github.com/bitinn/node-fetch/issues"
+   },
+-  "bundleDependencies": false,
+   "dependencies": {},
+-  "deprecated": false,
+   "description": "A light-weight module that brings window.fetch to node.js",
+   "devDependencies": {
+     "@ungap/url-search-params": "^0.1.2",
+@@ -61,6 +65,10 @@
+   "engines": {
+     "node": "4.x || >=6.0.0"
+   },
++  "exports": {
++    "import": "./lib/index.mjs",
++    "require": "./lib/index.js"
++  },
+   "files": [
+     "lib/index.js",
+     "lib/index.mjs",
