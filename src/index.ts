@@ -18,10 +18,10 @@ const env = dotenv.config()
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 5
-const MAX_CLIENT_REQ = 5 // in range 0 - 200
-// const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
-const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
+const MAX_CLIENTS_TO_PROCESS = 10000
+const MAX_CLIENT_REQ = 100 // in range 0 - 200
+const AUDIENCE_CSV = "./data/unsubscribed_segment_export_71409e2f2f.csv"
+// const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
 const BAD_CLIENTS = "./data/Clients_Failed_Update.log"
 const REVIEW_CLIENTS = "./data/Clients_For_Review.log"
 // const DEFAULT_LOG = "./data/default.log"
@@ -155,7 +155,7 @@ async function getUserToken() {
         } as RequestConfig)
         const json = await response.json()
         const token = json.AccessToken
-        userTokenDebug("Have MB user token %s.",token)
+        userTokenDebug("Have MB user token %s.", token)
         return token
     } catch (error) {
         userTokenDebug("Failed to retrieve MB user token %o", error)
@@ -185,9 +185,8 @@ async function getClients(accessToken: string, offset: number) {
     myHeaders.append("Authorization", accessToken)
 
     const urlencoded = new URLSearchParams()
-    // TODO #4 replace magic strings
     urlencoded.append("Username", SITEOWNER)
-    urlencoded.append("Password", "apitest1234")
+    urlencoded.append("Password", PASSWORD)
 
     const init: any = {
         method: "GET",
@@ -239,6 +238,7 @@ async function updateClientOptInStatus(
     clientID: string,
     optOut: boolean
 ): Promise<string> {
+    const optInStatusDebug = debug("optInStatus")
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
     myHeaders.append("API-Key", API_TOKEN)
@@ -250,12 +250,12 @@ async function updateClientOptInStatus(
             Id: clientID,
             SendAccountEmails: true,
             SendAccountTexts: true,
-            SendPromotionalEmails: optOut,
-            SendPromotionalTexts: optOut,
+            SendPromotionalEmails: !optOut,
+            // Does nothing - you can't change the settings for texts via the API
+            SendPromotionalTexts: !optOut,
             SendScheduleEmails: true,
             SendScheduleTexts: true,
         },
-        SendEmail: true,
         CrossRegionalUpdate: false,
         Test: false,
     })
@@ -293,6 +293,7 @@ async function updateClientOptInStatus(
                                     `Client ${client.Id} ${client.FirstName} ${client.LastName} failed to update.`
                                 )
                             }
+                            if (optOut) { optInStatusDebug("Opted out %s.", client.Id) }
                             resolve(`${client.Id}: ${client.Action}`)
                         }
                         // should never reach here
@@ -332,6 +333,7 @@ async function updateClients(
     for (const client of clients) {
         // optOutEmails is all the user who have opted out via MailChimp
         let optOut = optOutEmails.has(client.Email)
+        clientReviewDebug("Opting out client %s %s %s due to presence of email (%s) in MailChimp CSV", client.Id, client.FirstName, client.LastName, client.Email)
         clientsProcessed += 1
         if (clientsProcessed % 100 == 0) {
             globalStatsDebug(
@@ -343,12 +345,12 @@ async function updateClients(
         if (client.Notes?.trim()) {
             const Id: String = client.Id
             // const Notes:String = client.Notes
-            const FirstName:String = client.FirstName
-            const LastName: String|undefined = client.LastName
+            const FirstName: String = client.FirstName
+            const LastName: String | undefined = client.LastName
             /* There's possibly a note saying don't send emails so play it safe */
             optOut = true
             const warning = `Opting out client ${Id} ${FirstName} ${LastName} due to presence of notes on file.`
-            clientReviewDebug("Opting out client %s %s %s due to presence of notes on file.",Id,FirstName,LastName)
+            clientReviewDebug("Opting out client %s %s %s due to presence of notes on file.", Id, FirstName, LastName)
             // const info = `${Id} ${FirstName} ${LastName} notes are: ${Notes.substr(0,20)}`
             // clientReviewDebug(info)
             const writeSuccess = review_clients.write(`${warning}\n`)
@@ -365,7 +367,7 @@ async function updateClients(
                 optedOutCount += 1
             } else {
                 // mainDebug(".")
-                updateClientsDebug("Opted in %s %s %s", client.Id, client.FirstName, client.LastName)
+                // updateClientsDebug("Opted in %s %s %s", client.Id, client.FirstName, client.LastName)
                 optedInCount += 1
             }
         } catch (error) {
