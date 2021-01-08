@@ -3,3 +3,4 @@ dist
 *.csv
 data/Clients_Failed_Update.log
 data/Clients_For_Review.log
+.env

@@ -10,24 +10,32 @@ import fetch, { Headers } from "node-fetch"
 import { URLSearchParams } from "url"
 import fs from "fs"
 import readline from "readline"
-// import draftlog = require("draftlog")
 import { BackoffError, RequestRateLimiter } from "request-rate-limiter"
 import debug from "debug"
+import dotenv from "dotenv"
+// eslint-disable-next-line no-unused-vars
+const env = dotenv.config()
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 500
-const MAX_CLIENT_REQ = 200 // in range 0 - 200
+const MAX_CLIENTS_TO_PROCESS = 5
+const MAX_CLIENT_REQ = 5 // in range 0 - 200
 // const AUDIENCE_CSV = "./data/unsubscribed_segment_export_8893817261.csv"
 const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
 const BAD_CLIENTS = "./data/Clients_Failed_Update.log"
 const REVIEW_CLIENTS = "./data/Clients_For_Review.log"
 // const DEFAULT_LOG = "./data/default.log"
 const CSV_HAS_HEADER = true
-const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
-const SITE_ID = "-99"
+// Test
+//const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
+//const SITE_ID = "-99"
+//const SITEOWNER = "Siteowner"
+// Production
+const API_TOKEN = process.env.API_TOKEN ? process.env.API_TOKEN : "b46102a0d390475aae114962a9a1fbd9"
+const SITE_ID = process.env.SITE_ID ? process.env.SITE_ID : "-99"
+const SITEOWNER = process.env.SITEOWNER ? process.env.SITEOWNER : "SiteOwner"
+const PASSWORD = process.env.PASSWORD ? process.env.PASSWORD : "apitest1234"
 const DEFAULT_EMAIL_COL = 1
-const SITEOWNER = "Siteowner"
 
 interface Client {
     Id: string
@@ -127,11 +135,11 @@ async function getUserToken() {
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/x-www-form-urlencoded")
     myHeaders.append("API-Key", API_TOKEN)
-    myHeaders.append("SiteId", "-99")
+    myHeaders.append("SiteId", SITE_ID)
 
     const urlencoded = new URLSearchParams()
     urlencoded.append("Username", SITEOWNER)
-    urlencoded.append("Password", "apitest1234")
+    urlencoded.append("Password", PASSWORD)
 
     const requestOptions: any = {
         method: "POST",
@@ -147,7 +155,7 @@ async function getUserToken() {
         } as RequestConfig)
         const json = await response.json()
         const token = json.AccessToken
-        userTokenDebug("Have MB user token.")
+        userTokenDebug("Have MB user token %s.",token)
         return token
     } catch (error) {
         userTokenDebug("Failed to retrieve MB user token %o", error)
@@ -357,6 +365,7 @@ async function updateClients(
                 optedOutCount += 1
             } else {
                 // mainDebug(".")
+                updateClientsDebug("Opted in %s %s %s", client.Id, client.FirstName, client.LastName)
                 optedInCount += 1
             }
         } catch (error) {
