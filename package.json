@@ -10,19 +10,19 @@
     "author": "barry@lissome.hk",
     "license": "ISC",
     "dependencies": {
-        "debug": "^4.1.1",
-        "node-fetch": "^2.6.0",
+        "debug": "^4.3.1",
+        "node-fetch": "^2.6.1",
         "request-rate-limiter": "^2.0.3",
-        "supports-color": "^7.1.0"
+        "supports-color": "^7.2.0"
     },
     "devDependencies": {
         "@types/debug": "^4.1.5",
-        "@types/node": "^13.13.9",
+        "@types/node": "^13.13.39",
         "@types/node-fetch": "^2.5.7",
         "@typescript-eslint/eslint-plugin": "^2.34.0",
         "@typescript-eslint/parser": "^2.34.0",
         "eslint": "^6.8.0",
-        "prettier": "^2.0.5",
-        "typescript": "^3.9.3"
+        "prettier": "^2.2.1",
+        "typescript": "^3.9.7"
     }
 }
