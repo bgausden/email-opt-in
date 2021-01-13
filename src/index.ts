@@ -18,9 +18,10 @@ const env = dotenv.config()
 
 const MB_API_VER = 6
 const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-const MAX_CLIENTS_TO_PROCESS = 10000
-const MAX_CLIENT_REQ = 100 // in range 0 - 200
-const AUDIENCE_CSV = "./data/unsubscribed_segment_export_71409e2f2f.csv"
+let MAX_CLIENT_REQ = process.env.MAX_CLIENT_REQ ? Number.parseInt(process.env.MAX_CLIENT_REQ) : 10 // in range 0 - 200
+const MAX_CLIENTS_TO_PROCESS = process.env.MAX_CLIENTS_TO_PROCESS ? Number.parseInt(process.env.MAX_CLIENTS_TO_PROCESS) : 50
+if (MAX_CLIENT_REQ > MAX_CLIENTS_TO_PROCESS) { MAX_CLIENT_REQ = MAX_CLIENTS_TO_PROCESS }
+const AUDIENCE_CSV = process.env.AUDIENCE_CSV ? process.env.AUDIENCE_CSV : "./data/unsubscribed_segment_export_71409e2f2f.csv"
 // const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
 const BAD_CLIENTS = "./data/Clients_Failed_Update.log"
 const REVIEW_CLIENTS = "./data/Clients_For_Review.log"
@@ -30,20 +31,29 @@ const CSV_HAS_HEADER = true
 //const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
 //const SITE_ID = "-99"
 //const SITEOWNER = "Siteowner"
-// Production
+// Set authentication and config in .env
 const API_TOKEN = process.env.API_TOKEN ? process.env.API_TOKEN : "b46102a0d390475aae114962a9a1fbd9"
 const SITE_ID = process.env.SITE_ID ? process.env.SITE_ID : "-99"
 const SITEOWNER = process.env.SITEOWNER ? process.env.SITEOWNER : "SiteOwner"
 const PASSWORD = process.env.PASSWORD ? process.env.PASSWORD : "apitest1234"
+const LIMITER_BACKOFFTIME = Math.max(Number.parseInt(process.env.BACKOFFTIME ?? "10"),10)
+const MAX_REQUEST_RATE = Math.min(Number.parseInt(process.env.REQUEST_RATE ?? "1000"),1000)
+const REQUEST_RATE_INTERVAL = Math.min(Number.parseInt(process.env.REQUEST_RATE_INTERVAL ?? "60"),60)
+const LIMITER_TIMEOUT = 60
 const DEFAULT_EMAIL_COL = 1
 
+type NullableString = string | null
+
 interface Client {
+    HomePhone: NullableString
+    WorkPhone: NullableString
+    MobilePhone: NullableString
     Id: string
     FirstName: string
-    LastName?: string
-    Email: string
+    LastName: string | null
+    Email: string | null
     Action?: string
-    Notes?: string
+    Notes: string | null
 }
 
 interface MBError {
@@ -71,6 +81,24 @@ interface updateClientsResult {
     optedOutClients: number
     updateFailedClients: number
 }
+
+export class cloneable {
+    public static deepCopy<T>(source: T): T {
+        return Array.isArray(source)
+            ? source.map(item => this.deepCopy(item))
+            : source instanceof Date
+                ? new Date(source.getTime())
+                : source && typeof source === 'object'
+                    ? Object.getOwnPropertyNames(source).reduce((o, prop) => {
+                        const propDesc = Object.getOwnPropertyDescriptor(source, prop)
+                        Object.defineProperty(o, prop, propDesc!);
+                        o[prop] = this.deepCopy(((source as unknown) as { [index: string]: T })[prop]);
+                        return o;
+                    }, Object.create(Object.getPrototypeOf(source)))
+                    : source;
+    }
+}
+
 
 /*
 This class is supposed to implement the use of fetch to access data instead
@@ -113,19 +141,19 @@ function is(value: any) {
 }
 
 function initLimiter(
-    backoffTime = 10,
-    requestRate = 1000,
-    interval = 60,
-    timeout = 600
+    backoffTime = LIMITER_BACKOFFTIME,
+    requestRate = MAX_REQUEST_RATE,
+    interval = REQUEST_RATE_INTERVAL,
+    timeout = LIMITER_TIMEOUT
 ) {
     mainDebug(
         `Rate limiting to ${requestRate} API calls per ${interval} seconds. %s`
     )
     return new RequestRateLimiter({
-        backoffTime: backoffTime,
-        requestRate: requestRate,
-        interval: interval,
-        timeout: timeout,
+        backoffTime,
+        requestRate,
+        interval,
+        timeout,
     })
 }
 
@@ -235,10 +263,19 @@ async function getEmails() {
  */
 async function updateClientOptInStatus(
     accessToken: string,
-    clientID: string,
+    client: Client,
     optOut: boolean
 ): Promise<string> {
     const optInStatusDebug = debug("optInStatus")
+
+    // sanitize phone numbers
+    client.HomePhone = client.HomePhone ? client.HomePhone.trim() : null
+    client.WorkPhone = client.WorkPhone ? client.WorkPhone.trim() : null
+    client.MobilePhone = client.MobilePhone ? client.MobilePhone.trim() : null
+
+    // sanitize email address
+    client.Email = client.Email ? client.Email.trim() : null
+
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
     myHeaders.append("API-Key", API_TOKEN)
@@ -247,7 +284,7 @@ async function updateClientOptInStatus(
 
     const raw = JSON.stringify({
         Client: {
-            Id: clientID,
+            Id: client.Id,
             SendAccountEmails: true,
             SendAccountTexts: true,
             SendPromotionalEmails: !optOut,
@@ -257,7 +294,7 @@ async function updateClientOptInStatus(
             SendScheduleTexts: true,
         },
         CrossRegionalUpdate: false,
-        Test: false,
+        Test: true,
     })
 
     const init: any = {
@@ -322,52 +359,28 @@ async function updateClients(
     */
     accessToken: string,
     clients: Client[],
-    optOutEmails: Set<string>
+    optOutEmails: Set<string>,
+    batchId = "<None>"
 ): Promise<updateClientsResult> {
-    const updateClientsDebug = debug("updateClients")
+/*     const updateClientsDebug = debug("updateClients")
     const failedUpdateDebug = debug("failedClientUpdate")
-    const clientReviewDebug = debug("reviewClients")
+    const clientReviewDebug = debug("reviewClients") */
     let optedInCount = 0
     let updateFailCount = 0
     let optedOutCount = 0
     for (const client of clients) {
         // optOutEmails is all the user who have opted out via MailChimp
-        let optOut = optOutEmails.has(client.Email)
-        clientReviewDebug("Opting out client %s %s %s due to presence of email (%s) in MailChimp CSV", client.Id, client.FirstName, client.LastName, client.Email)
-        clientsProcessed += 1
-        if (clientsProcessed % 100 == 0) {
-            globalStatsDebug(
-                "%d of %d clients processed",
-                clientsProcessed,
-                clientsRetrieved
-            )
-        }
-        if (client.Notes?.trim()) {
-            const Id: String = client.Id
-            // const Notes:String = client.Notes
-            const FirstName: String = client.FirstName
-            const LastName: String | undefined = client.LastName
-            /* There's possibly a note saying don't send emails so play it safe */
-            optOut = true
-            const warning = `Opting out client ${Id} ${FirstName} ${LastName} due to presence of notes on file.`
-            clientReviewDebug("Opting out client %s %s %s due to presence of notes on file.", Id, FirstName, LastName)
-            // const info = `${Id} ${FirstName} ${LastName} notes are: ${Notes.substr(0,20)}`
-            // clientReviewDebug(info)
-            const writeSuccess = review_clients.write(`${warning}\n`)
-            if (!writeSuccess) {
-                failedUpdateDebug(
-                    `Failed to write ${Id} ${FirstName} ${LastName} to file: ${bad_clients.path}. Continuing anyway.`
-                )
-            }
-        }
+        let optOut = false
+        optOut = checkEmailOptOut(client, optOutEmails)
+        optOut = checkNotesOptOut(client)
         try {
-            await updateClientOptInStatus(accessToken, client.Id, optOut)
+            await updateClientOptInStatus(accessToken, sanitizeClient(cloneable.deepCopy(client)), optOut)
             if (optOut) {
                 // mainDebug("O")
                 optedOutCount += 1
             } else {
                 // mainDebug(".")
-                // updateClientsDebug("Opted in %s %s %s", client.Id, client.FirstName, client.LastName)
+                updateClientsDebug("Opted in %s %s %s", client.Id, client.FirstName, client.LastName)
                 optedInCount += 1
             }
         } catch (error) {
@@ -380,9 +393,17 @@ async function updateClients(
                 )
             }
         }
+        clientsProcessed += 1
+        if (clientsProcessed % 100 == 0) {
+            globalStatsDebug(
+                "%d of %d clients processed",
+                clientsProcessed,
+                clientsRetrieved
+            )
+        }
     }
     updateClientsDebug(
-        `Opted-in: %d, Opted-out: %d, Failed to update: %d`,
+        `Batch ${batchId}: Opted-in: %d, Opted-out: %d, Failed to update: %d`,
         optedInCount,
         optedOutCount,
         updateFailCount
@@ -396,15 +417,57 @@ async function updateClients(
     }
 }
 
+function checkEmailOptOut(client: Client, optOutEmails: Set<string>) {
+    let optOut = false
+    const Email = client.Email?.trim() ?? null
+    if (Email) {
+        optOut = optOutEmails.has(Email)
+        if (optOut) {clientReviewDebug("Opting out client %s %s %s due to presence of email (%s) in MailChimp CSV", client.Id, client.FirstName, client.LastName, Email)}
+    }
+    return optOut
+}
+
+function checkNotesOptOut(client: Client) {
+    let optOut = false
+    const Notes = client.Notes?.trim() ?? null
+    if (Notes) {
+/*         const Id = client.Id
+        const FirstName = client.FirstName
+        const LastName = client.LastName */
+        /* There's possibly a note saying don't send emails so play it safe */
+        optOut = true
+        clientReviewDebug("Opting out client %s %s %s due to presence of notes on file.", client.Id, client.FirstName, client.LastName)
+        // const info = `${Id} ${FirstName} ${LastName} notes are: ${Notes.substr(0,20)}`
+        // clientReviewDebug(info)
+        // TODO make the file updates asynchronous
+        const writeSuccess = review_clients.write(`Opting out client ${client.Id} ${client.FirstName} ${client.LastName} due to presence of notes on file.\n`)
+        if (!writeSuccess) {
+            failedUpdateDebug(
+                `Failed to write ${client.Id} ${client.FirstName} ${client.LastName} to file: ${bad_clients.path}. Continuing anyway.`
+            )
+        }
+    }
+    return optOut
+}
+
+function sanitizeClient(client:Client) {
+    client.FirstName = client.FirstName?.trim() ?? null
+    client.LastName = client.LastName?.trim() ?? null
+    client.HomePhone = client.HomePhone?.trim() ?? null
+    client.WorkPhone = client.WorkPhone?.trim() ?? null
+    client.MobilePhone = client.MobilePhone?.trim() ?? null
+    client.Notes = client.Notes?.trim() ?? null
+    return client
+}
+
 async function processClients() {
-    // eslint-disable-next-line no-unused-vars
     const optOutEmails = await getEmails()
     const accessToken = await getUserToken()
     const updateClientPromises: Promise<updateClientsResult>[] = []
     mainDebug("Retrieving and updating clients.")
     for (
         let index = 0;
-        index < MAX_CLIENTS_TO_PROCESS;
+        index <= MAX_CLIENTS_TO_PROCESS;
         index += MAX_CLIENT_REQ
     ) {
         try {
@@ -438,6 +501,9 @@ async function processClients() {
 
 const mainDebug = debug("main")
 const globalStatsDebug = debug("global-stats")
+const updateClientsDebug = debug("updateClients")
+const failedUpdateDebug = debug("failedClientUpdate")
+const clientReviewDebug = debug("reviewClients")
 const bad_clients = fs.createWriteStream(BAD_CLIENTS)
 const review_clients = fs.createWriteStream(REVIEW_CLIENTS)
 let clientsRetrieved = 0
