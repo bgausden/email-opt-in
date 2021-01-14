@@ -2,8 +2,6 @@
 
 /* Run from PS command-line: $env:DEBUG="*,-getClients"; node .\dist\index.js */
 
-// TODO #1 capture and dump clients where updates failed
-// TODO #2 add config to control data sources, data outputs and what logging to generate.
 // TODO #3 add progress meter
 
 import fetch, { Headers } from "node-fetch"
@@ -12,36 +10,31 @@ import fs from "fs"
 import readline from "readline"
 import { BackoffError, RequestRateLimiter } from "request-rate-limiter"
 import debug from "debug"
-/* import dotenv, { DotenvConfigOutput } from "dotenv"
-import dotenvParseVariables from "dotenv-parse-variables" */
 import { env, loadEnv } from './env.js'
 loadEnv()
-/* // eslint-disable-next-line no-unused-vars
-const env = dotenv.config()
-let typedEnv
-if (env.parsed) {
-    typedEnv = dotenvParseVariables(env.parsed)
-} */
 
-// const MB_API_VER = 6
 const MB_API_BASE_URL = env.MB_API_BASE_URL
-
-const MAX_CLIENTS_TO_PROCESS = env.MAX_CLIENTS_TO_PROCESS
-const MAX_CLIENT_REQ = Math.min(env.MAX_CLIENT_REQ, MAX_CLIENTS_TO_PROCESS)
-const AUDIENCE_CSV = env.AUDIENCE_CSV
-const BAD_CLIENTS = env.BAD_CLIENTS
-const REVIEW_CLIENTS = env.REVIEW_CLIENTS
 const MB_API_TEST_FLAG = env.MB_API_TEST_FLAG
-const CSV_HAS_HEADER = env.CSV_HAS_HEADER
+
 const API_TOKEN = env.API_TOKEN
 const SITE_ID = env.SITE_ID
 const SITEOWNER = env.SITEOWNER
 const PASSWORD = env.PASSWORD
+
+const MAX_CLIENTS_TO_PROCESS = env.MAX_CLIENTS_TO_PROCESS
+const MAX_CLIENT_REQ = Math.min(env.MAX_CLIENT_REQ, MAX_CLIENTS_TO_PROCESS)
+
+const BAD_CLIENTS = env.BAD_CLIENTS
+const REVIEW_CLIENTS = env.REVIEW_CLIENTS
+
+const AUDIENCE_CSV = env.AUDIENCE_CSV
+const CSV_HAS_HEADER = env.CSV_HAS_HEADER
+const EMAIL_COLUMN = env.EMAIL_COLUMN
+
 const LIMITER_BACKOFFTIME = Math.max(env.LIMITER_BACKOFFTIME,10)
 const MAX_REQUEST_RATE = Math.min(env.MAX_REQUEST_RATE, 1000)
 const REQUEST_RATE_INTERVAL = Math.min(env.REQUEST_RATE_INTERVAL, 60)
 const LIMITER_TIMEOUT = env.LIMITER_TIMEOUT
-const EMAIL_COLUMN = env.EMAIL_COLUMN
 
 type NullableString = string | null
 
@@ -51,10 +44,10 @@ interface Client {
     MobilePhone: NullableString
     Id: string
     FirstName: string
-    LastName: string | null
-    Email: string | null
+    LastName: NullableString
+    Email: NullableString
     Action?: string
-    Notes: string | null
+    Notes: NullableString
 }
 
 interface MBError {
