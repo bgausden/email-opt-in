@@ -13,12 +13,15 @@
     "dependencies": {
         "debug": "^4.3.1",
         "dotenv": "^8.2.0",
+        "dotenv-parse-variables": "^1.0.1",
         "node-fetch": "^2.6.1",
         "request-rate-limiter": "^2.0.3",
-        "supports-color": "^7.2.0"
+        "supports-color": "^7.2.0",
+        "ts-dotenv": "^0.8.3"
     },
     "devDependencies": {
         "@types/debug": "^4.1.5",
+        "@types/dotenv-parse-variables": "^0.2.0",
         "@types/node": "^13.13.39",
         "@types/node-fetch": "^2.5.7",
         "@typescript-eslint/eslint-plugin": "^2.34.0",

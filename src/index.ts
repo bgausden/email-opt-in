@@ -12,35 +12,36 @@ import fs from "fs"
 import readline from "readline"
 import { BackoffError, RequestRateLimiter } from "request-rate-limiter"
 import debug from "debug"
-import dotenv from "dotenv"
-// eslint-disable-next-line no-unused-vars
+/* import dotenv, { DotenvConfigOutput } from "dotenv"
+import dotenvParseVariables from "dotenv-parse-variables" */
+import { env, loadEnv } from './env.js'
+loadEnv()
+/* // eslint-disable-next-line no-unused-vars
 const env = dotenv.config()
+let typedEnv
+if (env.parsed) {
+    typedEnv = dotenvParseVariables(env.parsed)
+} */
 
-const MB_API_VER = 6
-const BASE_URL = `https://api.mindbodyonline.com/public/v${MB_API_VER}`
-let MAX_CLIENT_REQ = process.env.MAX_CLIENT_REQ ? Number.parseInt(process.env.MAX_CLIENT_REQ) : 10 // in range 0 - 200
-const MAX_CLIENTS_TO_PROCESS = process.env.MAX_CLIENTS_TO_PROCESS ? Number.parseInt(process.env.MAX_CLIENTS_TO_PROCESS) : 50
-if (MAX_CLIENT_REQ > MAX_CLIENTS_TO_PROCESS) { MAX_CLIENT_REQ = MAX_CLIENTS_TO_PROCESS }
-const AUDIENCE_CSV = process.env.AUDIENCE_CSV ? process.env.AUDIENCE_CSV : "./data/unsubscribed_segment_export_71409e2f2f.csv"
-// const AUDIENCE_CSV = "./data/opt-out-emails-mbo-test.csv"
-const BAD_CLIENTS = "./data/Clients_Failed_Update.log"
-const REVIEW_CLIENTS = "./data/Clients_For_Review.log"
-// const DEFAULT_LOG = "./data/default.log"
-const CSV_HAS_HEADER = true
-// Test
-//const API_TOKEN = "b46102a0d390475aae114962a9a1fbd9"
-//const SITE_ID = "-99"
-//const SITEOWNER = "Siteowner"
-// Set authentication and config in .env
-const API_TOKEN = process.env.API_TOKEN ? process.env.API_TOKEN : "b46102a0d390475aae114962a9a1fbd9"
-const SITE_ID = process.env.SITE_ID ? process.env.SITE_ID : "-99"
-const SITEOWNER = process.env.SITEOWNER ? process.env.SITEOWNER : "SiteOwner"
-const PASSWORD = process.env.PASSWORD ? process.env.PASSWORD : "apitest1234"
-const LIMITER_BACKOFFTIME = Math.max(Number.parseInt(process.env.BACKOFFTIME ?? "10"),10)
-const MAX_REQUEST_RATE = Math.min(Number.parseInt(process.env.REQUEST_RATE ?? "1000"),1000)
-const REQUEST_RATE_INTERVAL = Math.min(Number.parseInt(process.env.REQUEST_RATE_INTERVAL ?? "60"),60)
-const LIMITER_TIMEOUT = 60
-const DEFAULT_EMAIL_COL = 1
+// const MB_API_VER = 6
+const MB_API_BASE_URL = env.MB_API_BASE_URL
+
+const MAX_CLIENTS_TO_PROCESS = env.MAX_CLIENTS_TO_PROCESS
+const MAX_CLIENT_REQ = Math.min(env.MAX_CLIENT_REQ, MAX_CLIENTS_TO_PROCESS)
+const AUDIENCE_CSV = env.AUDIENCE_CSV
+const BAD_CLIENTS = env.BAD_CLIENTS
+const REVIEW_CLIENTS = env.REVIEW_CLIENTS
+const MB_API_TEST_FLAG = env.MB_API_TEST_FLAG
+const CSV_HAS_HEADER = env.CSV_HAS_HEADER
+const API_TOKEN = env.API_TOKEN
+const SITE_ID = env.SITE_ID
+const SITEOWNER = env.SITEOWNER
+const PASSWORD = env.PASSWORD
+const LIMITER_BACKOFFTIME = Math.max(env.LIMITER_BACKOFFTIME,10)
+const MAX_REQUEST_RATE = Math.min(env.MAX_REQUEST_RATE, 1000)
+const REQUEST_RATE_INTERVAL = Math.min(env.REQUEST_RATE_INTERVAL, 60)
+const LIMITER_TIMEOUT = env.LIMITER_TIMEOUT
+const EMAIL_COLUMN = env.EMAIL_COLUMN
 
 type NullableString = string | null
 
@@ -178,7 +179,7 @@ async function getUserToken() {
 
     try {
         const response = await limiter.request({
-            url: `${BASE_URL}/usertoken/issue`,
+            url: `${MB_API_BASE_URL}/usertoken/issue`,
             init: requestOptions,
         } as RequestConfig)
         const json = await response.json()
@@ -223,7 +224,7 @@ async function getClients(accessToken: string, offset: number) {
     }
 
     const response = await limiter.request({
-        url: `${BASE_URL}/client/clients?limit=${MAX_CLIENT_REQ}&offset=${offset}&searchText=`,
+        url: `${MB_API_BASE_URL}/client/clients?limit=${MAX_CLIENT_REQ}&offset=${offset}&searchText=`,
         init: init,
     } as RequestConfig)
     const json = await response.json()
@@ -243,7 +244,7 @@ async function getEmails() {
     const emails = new Set<string>()
     let firstLine = true
     rl.on("line", (line) => {
-        const email = line.split(",", 10)[DEFAULT_EMAIL_COL - 1]
+        const email = line.split(",", 10)[EMAIL_COLUMN - 1]
         if (firstLine && CSV_HAS_HEADER) {
             firstLine = false
         } else {
@@ -268,13 +269,13 @@ async function updateClientOptInStatus(
 ): Promise<string> {
     const optInStatusDebug = debug("optInStatus")
 
-    // sanitize phone numbers
+    /* // sanitize phone numbers
     client.HomePhone = client.HomePhone ? client.HomePhone.trim() : null
     client.WorkPhone = client.WorkPhone ? client.WorkPhone.trim() : null
     client.MobilePhone = client.MobilePhone ? client.MobilePhone.trim() : null
 
     // sanitize email address
-    client.Email = client.Email ? client.Email.trim() : null
+    client.Email = client.Email ? client.Email.trim() : null */
 
     const myHeaders = new Headers()
     myHeaders.append("Content-Type", "application/json")
@@ -294,7 +295,7 @@ async function updateClientOptInStatus(
             SendScheduleTexts: true,
         },
         CrossRegionalUpdate: false,
-        Test: true,
+        Test: MB_API_TEST_FLAG,
     })
 
     const init: any = {
@@ -308,7 +309,7 @@ async function updateClientOptInStatus(
         try {
             limiter
                 .request({
-                    url: `${BASE_URL}/client/updateclient`,
+                    url: `${MB_API_BASE_URL}/client/updateclient`,
                     init: init,
                 } as RequestConfig)
                 .then((response) => {
@@ -362,9 +363,9 @@ async function updateClients(
     optOutEmails: Set<string>,
     batchId = "<None>"
 ): Promise<updateClientsResult> {
-/*     const updateClientsDebug = debug("updateClients")
-    const failedUpdateDebug = debug("failedClientUpdate")
-    const clientReviewDebug = debug("reviewClients") */
+    /*     const updateClientsDebug = debug("updateClients")
+        const failedUpdateDebug = debug("failedClientUpdate")
+        const clientReviewDebug = debug("reviewClients") */
     let optedInCount = 0
     let updateFailCount = 0
     let optedOutCount = 0
@@ -376,11 +377,9 @@ async function updateClients(
         try {
             await updateClientOptInStatus(accessToken, sanitizeClient(cloneable.deepCopy(client)), optOut)
             if (optOut) {
-                // mainDebug("O")
                 optedOutCount += 1
             } else {
-                // mainDebug(".")
-                updateClientsDebug("Opted in %s %s %s", client.Id, client.FirstName, client.LastName)
+                // updateClientsDebug("Opted in %s %s %s", client.Id, client.FirstName, client.LastName)
                 optedInCount += 1
             }
         } catch (error) {
@@ -422,7 +421,7 @@ function checkEmailOptOut(client: Client, optOutEmails: Set<string>) {
     const Email = client.Email?.trim() ?? null
     if (Email) {
         optOut = optOutEmails.has(Email)
-        if (optOut) {clientReviewDebug("Opting out client %s %s %s due to presence of email (%s) in MailChimp CSV", client.Id, client.FirstName, client.LastName, Email)}
+        if (optOut) { clientReviewDebug("Opting out client %s %s %s due to presence of email (%s) in MailChimp CSV", client.Id, client.FirstName, client.LastName, Email) }
     }
     return optOut
 }
@@ -431,9 +430,9 @@ function checkNotesOptOut(client: Client) {
     let optOut = false
     const Notes = client.Notes?.trim() ?? null
     if (Notes) {
-/*         const Id = client.Id
-        const FirstName = client.FirstName
-        const LastName = client.LastName */
+        /*         const Id = client.Id
+                const FirstName = client.FirstName
+                const LastName = client.LastName */
         /* There's possibly a note saying don't send emails so play it safe */
         optOut = true
         clientReviewDebug("Opting out client %s %s %s due to presence of notes on file.", client.Id, client.FirstName, client.LastName)
@@ -450,7 +449,7 @@ function checkNotesOptOut(client: Client) {
     return optOut
 }
 
-function sanitizeClient(client:Client) {
+function sanitizeClient(client: Client) {
     client.FirstName = client.FirstName?.trim() ?? null
     client.LastName = client.LastName?.trim() ?? null
     client.HomePhone = client.HomePhone?.trim() ?? null
@@ -467,7 +466,7 @@ async function processClients() {
     mainDebug("Retrieving and updating clients.")
     for (
         let index = 0;
-        index <= MAX_CLIENTS_TO_PROCESS;
+        index < MAX_CLIENTS_TO_PROCESS;
         index += MAX_CLIENT_REQ
     ) {
         try {
