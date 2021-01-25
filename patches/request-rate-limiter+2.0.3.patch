@@ -1,0 +1,14 @@
+diff --git a/node_modules/request-rate-limiter/index.mjs b/node_modules/request-rate-limiter/index.mjs
+index f335861..33c40d2 100644
+--- a/node_modules/request-rate-limiter/index.mjs
++++ b/node_modules/request-rate-limiter/index.mjs
+@@ -8,5 +8,7 @@ export {
+     BackoffError,
+     RequestRequestHandler,
+     MockRequestHandler,
+-    RequestRateLimiter as default 
++    RequestRateLimiter
++    //     RequestRateLimiter as default 
++
+ };
+\ No newline at end of file

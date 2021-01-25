@@ -1,5 +1,5 @@
 diff --git a/node_modules/node-fetch/package.json b/node_modules/node-fetch/package.json
-index 2f322b5..cf5be43 100644
+index 42c9006..7ccb4d9 100644
 --- a/node_modules/node-fetch/package.json
 +++ b/node_modules/node-fetch/package.json
 @@ -1,26 +1,32 @@
@@ -8,7 +8,7 @@ index 2f322b5..cf5be43 100644
 +  "_args": [
 +    [
 +      "node-fetch@2.6.1",
-+      "D:\\git\\email-opt-in"
++      "/Users/barryg/Source/email-opt-in"
 +    ]
 +  ],
 +  "_from": "node-fetch@2.6.1",
@@ -38,9 +38,9 @@ index 2f322b5..cf5be43 100644
    "_resolved": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
 -  "_shasum": "045bd323631f76ed2e2b55573394416b639a0052",
 -  "_spec": "node-fetch@https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.1.tgz",
--  "_where": "C:\\Users\\Barry\\AppData\\Local\\Temp\\tmp-52688C1RJ12yRRvuY",
+-  "_where": "/private/var/folders/wn/x__g6z9j2d14y31jfvp8_d340000gp/T/tmp-529032XEbiCz9C70a",
 +  "_spec": "2.6.1",
-+  "_where": "D:\\git\\email-opt-in",
++  "_where": "/Users/barryg/Source/email-opt-in",
    "author": {
      "name": "David Frank"
    },
@@ -59,9 +59,9 @@ index 2f322b5..cf5be43 100644
      "node": "4.x || >=6.0.0"
    },
 +  "exports": {
-+    "import": "./lib/index.mjs",
-+    "require": "./lib/index.js"
-+  },
++        "import": "./lib/index.mjs",
++        "require": "./lib/index.js"
++      },
    "files": [
      "lib/index.js",
      "lib/index.mjs",

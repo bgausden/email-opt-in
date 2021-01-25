@@ -6,3 +6,6 @@
   "module": "lib/index.mjs",
 
   Update package.json in any packages that give "no such export" to include exports (and maybe modules?)
+
+  Run patch-package to create a patch we can apply in future: npx patch-package --exclude aa.txt node-fetch
+  Note we are overriding the default include files behaviour which excludes package.json by specifying an explicit --exclude option with a fake file.
