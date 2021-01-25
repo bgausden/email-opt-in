@@ -11,6 +11,7 @@ import readline from "readline"
 import { BackoffError, RequestRateLimiter } from "request-rate-limiter"
 import debug from "debug"
 import { env, loadEnv } from './env.js'
+import path from "path"
 loadEnv()
 
 const MB_API_BASE_URL = env.MB_API_BASE_URL
@@ -131,6 +132,21 @@ function is(value: any) {
                 .toLowerCase()
             return value != null && type === check.toLowerCase()
         },
+    }
+}
+
+function createDir(pathName:string) {
+    const dirPath = path.dirname(pathName)
+
+    try {
+
+        if (!fs.existsSync(dirPath))
+         {
+            fs.mkdirSync(dirPath)
+        }
+    } catch (error) {
+        console.error(`Fatal: Unable to create directory ${dirPath}. Error is ${error}.`)
+        throw(error)
     }
 }
 
@@ -496,7 +512,9 @@ const globalStatsDebug = debug("global-stats")
 const updateClientsDebug = debug("updateClients")
 const failedUpdateDebug = debug("failedClientUpdate")
 const clientReviewDebug = debug("reviewClients")
+createDir(BAD_CLIENTS)
 const bad_clients = fs.createWriteStream(BAD_CLIENTS)
+createDir(REVIEW_CLIENTS)
 const review_clients = fs.createWriteStream(REVIEW_CLIENTS)
 let clientsRetrieved = 0
 let clientsProcessed = 0
