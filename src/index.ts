@@ -1,6 +1,8 @@
 /* email-opt-in */
 
 /* Run from PS command-line: $env:DEBUG="*,-getClients"; node .\dist\index.js */
+/* Run from CMD command-line: set DEBUG=*,-getClients && node .\dist\index.js */
+
 
 // TODO #3 add progress meter
 
@@ -31,8 +33,8 @@ const AUDIENCE_CSV = env.AUDIENCE_CSV
 const CSV_HAS_HEADER = env.CSV_HAS_HEADER
 const EMAIL_COLUMN = env.EMAIL_COLUMN
 
-const LIMITER_BACKOFFTIME = Math.max(env.LIMITER_BACKOFFTIME,10)
-const MAX_REQUEST_RATE = Math.min(env.MAX_REQUEST_RATE, 1000)
+const LIMITER_BACKOFFTIME = Math.max(env.LIMITER_BACKOFFTIME, 10)
+const MAX_REQUEST_RATE = Math.min(env.MAX_REQUEST_RATE, 1500)
 const REQUEST_RATE_INTERVAL = Math.min(env.REQUEST_RATE_INTERVAL, 60)
 const LIMITER_TIMEOUT = env.LIMITER_TIMEOUT
 
@@ -185,10 +187,10 @@ async function getUserToken() {
 }
 
 function getAudience() {
-    mainDebug("Opening opted-out clients CSV %s", "getAudience")
+    mainDebug(`Opening opted-out clients CSV ${AUDIENCE_CSV} %s`)
     try {
         const readable = fs.createReadStream(AUDIENCE_CSV)
-        mainDebug("Opening opted-out clients CSV completed. %s", "getAudience")
+        mainDebug("Opening opted-out clients CSV completed.")
         return readable
     } catch (error) {
         mainDebug("Opening opted-out clients CSV failed %o", error)
@@ -254,6 +256,7 @@ async function getEmails() {
  * @param accessToken Auth token to access MB REST API
  * @param clientID Client ID
  * @param optOut Whether to opt the client out of marketing emails
+ * @returns string of form `${client.Id}: ${client.Action}` where client.Action === "Updated" is a success.
  */
 async function updateClientOptInStatus(
     accessToken: string,
@@ -490,6 +493,8 @@ async function processClients() {
             bad_clients.end(() => mainDebug("Closed bad clients file"))
         )
 }
+
+debug.log = console.info.bind(console)
 
 const mainDebug = debug("main")
 const globalStatsDebug = debug("global-stats")

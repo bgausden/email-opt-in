@@ -10,7 +10,9 @@
             "name": "Launch Program",
             "skipFiles": ["<node_internals>/**"],
             "program": "${workspaceFolder}/dist/index.js",
-            "outFiles": ["${workspaceFolder}/dist/**/*.js"]
+            "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+            "env": {"DEBUG": "*,-getClients",
+            "DEBUG_COLORS": "true"}
         }
     ]
 }
