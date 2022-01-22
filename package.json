@@ -12,7 +12,7 @@
     "license": "ISC",
     "dependencies": {
         "debug": "^4.3.1",
-        "node-fetch": "^2.6.1",
+        "node-fetch": "^3.1.1",
         "request-rate-limiter": "^2.0.3",
         "ts-dotenv": "^0.8.3"
     },
